@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Seguimiento Diario TT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f2f3ee; --surface:#fbfbf8; --fg:#1d2a22; --muted:#5d6a61; --line:#d6dacf;
+  --accent:#2e6b3c; --accent-ink:#ffffff; --ok-bg:#dcebd9; --ok-fg:#245a31;
+  --warn-bg:#f6e7cf; --warn-fg:#8a4f08; --crit-bg:#f7dcd8; --crit-fg:#a1211a;
+  --font-display:'Barlow Semi Condensed','Arial Narrow',system-ui,sans-serif;
+  --font-body:'Barlow',system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    color-scheme:dark;
+    --bg:#141a16; --surface:#1b231e; --fg:#e6ebe3; --muted:#9aa79d; --line:#2c372f;
+    --accent:#6fbf7e; --accent-ink:#0f1a12; --ok-bg:#1f3524; --ok-fg:#9fd9aa;
+    --warn-bg:#3a2c14; --warn-fg:#e8b56c; --crit-bg:#3d1d1a; --crit-fg:#f3a199;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg); color:var(--fg); font-family:var(--font-body); font-size:16px; line-height:1.45; padding:20px max(16px, env(safe-area-inset-right, 0px)) 56px max(16px, env(safe-area-inset-left, 0px))}
+#app{max-width:860px; margin:0 auto}
+button,input,select,textarea{font:inherit; color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.eyebrow{font-family:var(--font-display); font-weight:600; font-size:13px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted)}
+h1{font-family:var(--font-display); font-weight:700; font-size:34px; line-height:1.1; margin:2px 0 0; text-transform:capitalize}
+.top{display:flex; flex-wrap:wrap; gap:14px 24px; align-items:flex-end; justify-content:space-between}
+.nav{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+.btn{border:1px solid var(--line); background:var(--surface); border-radius:6px; padding:7px 12px; font-weight:500; min-height:38px}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:600}
+.btn.ghost{background:transparent; border-color:transparent; color:var(--muted); padding:4px 8px; min-height:30px; font-size:14px}
+.btn.ghost:hover{color:var(--fg)}
+input[type=text],input[type=date],select{background:var(--surface); border:1px solid var(--line); border-radius:6px; padding:7px 10px; min-height:38px; min-width:0}
+.tabs{display:flex; gap:22px; margin-top:22px; border-bottom:1px solid var(--line); align-items:flex-end}
+.tab{background:none; border:0; border-bottom:3px solid transparent; padding:8px 0; font-family:var(--font-display); font-weight:600; font-size:18px; color:var(--muted)}
+.tab[aria-selected=true]{color:var(--fg); border-bottom-color:var(--accent)}
+.sync{margin-left:auto; display:flex; gap:8px; align-items:center; padding-bottom:6px; font-size:14px; color:var(--muted)}
+.sync .dot{width:9px; height:9px; border-radius:50%; background:var(--muted)}
+.sync.ok .dot{background:var(--accent)}
+.sync.warn .dot{background:var(--warn-fg)}
+.sync.bad .dot{background:var(--crit-fg)}
+.stats{display:flex; flex-wrap:wrap; gap:6px 26px; margin:16px 0 4px; color:var(--muted); font-size:15px}
+.stats b{color:var(--fg); font-variant-numeric:tabular-nums; font-weight:600}
+.banner{margin-top:14px; padding:9px 12px; background:var(--warn-bg); color:var(--warn-fg); border-radius:6px; font-size:14px; display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center}
+.addbar{display:flex; flex-wrap:wrap; gap:8px; margin-top:16px}
+.addbar input[type=text]{flex:1 1 220px}
+.job{border-top:1px solid var(--line); padding:20px 0 6px; margin-top:18px}
+.job-h{display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; justify-content:space-between}
+.job-t{display:flex; flex-wrap:wrap; gap:6px 12px; align-items:center; min-width:0}
+h3{font-family:var(--font-display); font-weight:700; font-size:23px; line-height:1.15; margin:0; overflow-wrap:anywhere}
+.pill{display:inline-block; padding:2px 10px; border-radius:99px; font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; background:var(--line); color:var(--muted)}
+.pill.ok{background:var(--ok-bg); color:var(--ok-fg)}
+.pill.warn{background:var(--warn-bg); color:var(--warn-fg)}
+.pill.crit{background:var(--crit-bg); color:var(--crit-fg)}
+.visto{border:1px solid var(--line); background:var(--surface); border-radius:99px; padding:4px 14px; font-weight:600; font-size:14px; color:var(--muted); min-height:34px}
+.visto[aria-pressed=true]{background:var(--accent); color:var(--accent-ink); border-color:var(--accent)}
+textarea{display:block; width:100%; margin-top:12px; background:var(--surface); border:1px solid var(--line); border-radius:6px; padding:10px 12px; line-height:1.5; resize:vertical; min-height:92px}
+.pend{list-style:none; margin:12px 0 0; padding:0; display:grid; gap:2px}
+.pend li{display:flex; gap:10px; align-items:flex-start; padding:5px 0}
+.pend input[type=checkbox]{width:19px; height:19px; margin:3px 0 0; accent-color:var(--accent); flex:none}
+.pend .tx{flex:1 1 auto; min-width:0; overflow-wrap:anywhere}
+.pend li.done .tx{text-decoration:line-through; color:var(--muted)}
+.who{font-size:13px; font-weight:600; color:var(--muted); background:var(--line); border-radius:4px; padding:1px 8px; white-space:nowrap}
+.x{background:none; border:0; color:var(--muted); font-size:20px; line-height:1; padding:0 6px}
+.x:hover{color:var(--crit-fg)}
+.addp{display:flex; flex-wrap:wrap; gap:8px; margin-top:8px}
+.addp input[type=text]:first-child{flex:2 1 200px}
+.addp input[type=text]:nth-child(2){flex:1 1 130px}
+.job-f{display:flex; gap:4px; margin-top:6px; justify-content:flex-end}
+.edit{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
+.edit input[type=text]{flex:1 1 220px}
+.group{margin-top:26px}
+.group h2{font-family:var(--font-display); font-weight:700; font-size:21px; margin:0 0 4px; display:flex; gap:10px; align-items:baseline}
+.group .n{font-size:14px; color:var(--muted); font-weight:500}
+.pend .job-tag{font-size:13px; color:var(--muted); display:block}
+.empty{margin-top:32px; color:var(--muted); max-width:56ch}
+.filters{display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; margin-top:16px}
+.chk{display:flex; align-items:center; gap:8px; color:var(--muted); font-size:15px}
+.chk input{width:18px; height:18px; accent-color:var(--accent)}
+.gate{margin-top:40px; max-width:520px}
+.gate h2{font-family:var(--font-display); font-size:26px; margin:0 0 8px}
+.gate p{color:var(--muted); margin:0 0 18px}
+#toast{position:fixed; left:50%; transform:translateX(-50%); bottom:calc(20px + env(safe-area-inset-bottom, 0px)); background:var(--fg); color:var(--bg); padding:9px 16px; border-radius:6px; font-size:14px; max-width:calc(100% - 32px); z-index:20}
+#toast[hidden]{display:none}
+@media (max-width:520px){ h1{font-size:28px} .tabs{gap:18px; flex-wrap:wrap} .sync{margin-left:0; width:100%} }
+</style>
+</head>
+<body>
+<div id="app"><p class="empty">Cargando…</p></div>
+<div id="toast" hidden></div>
+
+<script>
+(function(){
+'use strict';
+var CLIENT_ID='842107814510-32fpvqs6cttkeldsf1llo0r7r1q4qpnc.apps.googleusercontent.com';
+var SHEET_ID='11P-qBA8VabY7Ez4Ia0kHrqRKUsQP_m1Gi7vmmiUal34';
+var SCOPE='https://www.googleapis.com/auth/spreadsheets';
+var API='https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID;
+var TAB_N='APP', TAB_T='APP_TRABAJOS', TAB_P='APP_PENDIENTES';
+
+//PURE-START
+function pad(n){return String(n).padStart(2,'0')}
+function fmt(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}
+function parse(s){var p=s.split('-').map(Number);return new Date(p[0],p[1]-1,p[2])}
+function es(iso){return iso&&/^\d{4}-\d{2}-\d{2}$/.test(iso)?iso.slice(8)+'/'+iso.slice(5,7)+'/'+iso.slice(0,4):''}
+function unes(s){
+  s=String(s==null?'':s).trim(); var m;
+  if((m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)))return m[3]+'-'+pad(+m[2])+'-'+pad(+m[1]);
+  if((m=s.match(/^(\d{4})-(\d{2})-(\d{2})$/)))return s;
+  return '';
+}
+function si(v){return /^s[ií]/i.test(String(v==null?'':v).trim())}
+function cell(r,i){return r&&r[i]!=null?String(r[i]):''}
+function ordenTrab(S){
+  return Object.keys(S.trabajos).sort(function(a,b){
+    var x=S.trabajos[a], y=S.trabajos[b];
+    return (x.creado||0)-(y.creado||0)||String(x.nombre).localeCompare(String(y.nombre));
+  });
+}
+function serializar(S){
+  var ids=ordenTrab(S), pos={};
+  ids.forEach(function(id,i){pos[id]=i});
+  var T=[['ID','Trabajo','Entrega','Archivado','Creado']];
+  ids.forEach(function(id){var t=S.trabajos[id];T.push([id,t.nombre||'',es(t.entrega),t.archivado?'Sí':'No',t.creado||0])});
+  var P=[['ID','ID trabajo','Trabajo','Pendiente','Responsable','Hecho','Creado']];
+  Object.keys(S.pend).sort(function(a,b){return (S.pend[a].creado||0)-(S.pend[b].creado||0)}).forEach(function(id){
+    var p=S.pend[id], t=S.trabajos[p.trabajoId];
+    P.push([id,p.trabajoId||'',t?t.nombre:'',p.texto||'',p.quien||'',p.hecho?'Sí':'No',p.creado||0]);
+  });
+  var N=[['Fecha','Trabajo','Entrega','Visto','Nota del día','Pendientes abiertos','ID trabajo']];
+  Object.keys(S.notas).filter(function(k){var n=S.notas[k];return S.trabajos[n.trabajoId]&&(n.texto||n.visto)}).sort(function(a,b){
+    var x=S.notas[a], y=S.notas[b];
+    if(x.fecha!==y.fecha)return x.fecha<y.fecha?1:-1;
+    return pos[x.trabajoId]-pos[y.trabajoId];
+  }).forEach(function(k){
+    var n=S.notas[k], t=S.trabajos[n.trabajoId];
+    var ab=Object.keys(S.pend).filter(function(pid){var p=S.pend[pid];return p.trabajoId===n.trabajoId&&!p.hecho}).sort(function(a,b){return (S.pend[a].creado||0)-(S.pend[b].creado||0)}).map(function(pid){var p=S.pend[pid];return '- '+p.texto+(p.quien?' ('+p.quien+')':'')}).join('\n');
+    N.push([es(n.fecha),t.nombre||'',es(t.entrega),n.visto?'Sí':'No',n.texto||'',ab,n.trabajoId]);
+  });
+  return {N:N,T:T,P:P};
+}
+function parsear(vN,vT,vP){
+  var S={trabajos:{},notas:{},pend:{}};
+  (vT||[]).forEach(function(r){
+    var id=cell(r,0).trim(); if(!id||!cell(r,1).trim())return;
+    S.trabajos[id]={nombre:cell(r,1).trim(),entrega:unes(cell(r,2)),archivado:si(cell(r,3)),creado:Number(cell(r,4))||0};
+  });
+  (vP||[]).forEach(function(r){
+    var id=cell(r,0).trim(), tid=cell(r,1).trim(); if(!id||!tid||!cell(r,3).trim())return;
+    S.pend[id]={trabajoId:tid,texto:cell(r,3),quien:cell(r,4).trim(),hecho:si(cell(r,5)),creado:Number(cell(r,6))||0};
+  });
+  (vN||[]).forEach(function(r){
+    var f=unes(cell(r,0)), tid=cell(r,6).trim(); if(!f||!tid||!S.trabajos[tid])return;
+    S.notas[f+'_'+tid]={fecha:f,trabajoId:tid,texto:cell(r,4),visto:si(cell(r,3))};
+  });
+  return S;
+}
+//PURE-END
+
+var S={trabajos:{},notas:{},pend:{}};
+var tok=null, tokExp=0, tc=null;
+var conn='off';          // off | cargando | on | vencida | error
+var cargado=false, guardando=false, pendiente=false, errorGuardar=false, errMsg='';
+var fecha=hoyStr(), tab='dia', editId=null, verHechos=false, filtro='', dirty=false;
+var app=document.getElementById('app'), timers={}, toastT=null, saveT=null;
+
+function hoyStr(){return fmt(new Date())}
+function addDias(s,n){var d=parse(s);d.setDate(d.getDate()+n);return fmt(d)}
+function corto(s){return s.slice(8)+'/'+s.slice(5,7)}
+function largo(s){return parse(s).toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long'})}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function uid(){return 'i'+Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+function toast(t){var el=document.getElementById('toast');el.textContent=t;el.hidden=false;clearTimeout(toastT);toastT=setTimeout(function(){el.hidden=true},3600)}
+
+/* ---------- Google ---------- */
+function initAuth(){
+  if(tc)return true;
+  if(!window.google||!google.accounts||!google.accounts.oauth2)return false;
+  tc=google.accounts.oauth2.initTokenClient({
+    client_id:CLIENT_ID, scope:SCOPE,
+    callback:onTok,
+    error_callback:function(){toast('No se completó el ingreso con Google.');if(conn!=='on')conn='off';render(true)}
+  });
+  return true;
+}
+function onTok(r){
+  if(!r||r.error||!r.access_token){toast('Google no autorizó el acceso.');conn=cargado?'vencida':'off';render(true);return}
+  tok=r.access_token; tokExp=Date.now()+((r.expires_in||3600)-90)*1000;
+  try{sessionStorage.setItem('tt-seg-tok',JSON.stringify({t:tok,e:tokExp}))}catch(e){}
+  if(cargado){conn='on';render(true);if(pendiente||errorGuardar)guardar()}
+  else cargar();
+}
+function conectar(){
+  if(!initAuth()){toast('Todavía no cargó el servicio de Google. Esperá unos segundos y probá de nuevo.');return}
+  tc.requestAccessToken({prompt:tok?'':'select_account'});
+}
+function api(path,opt){
+  opt=opt||{};
+  if(!tok||Date.now()>tokExp){conn=cargado?'vencida':'off';var e0=new Error('sesion');e0.code=401;return Promise.reject(e0)}
+  return fetch(API+path,{method:opt.method||'GET',headers:Object.assign({'Authorization':'Bearer '+tok},opt.body?{'Content-Type':'application/json'}:{}),body:opt.body?JSON.stringify(opt.body):undefined}).then(function(r){
+    if(r.status===401){tok=null;conn=cargado?'vencida':'off';var e1=new Error('sesion');e1.code=401;throw e1}
+    if(!r.ok)return r.json().catch(function(){return {}}).then(function(j){var e2=new Error((j.error&&j.error.message)||('Error '+r.status));e2.code=r.status;throw e2});
+    return r.json();
+  });
+}
+function enc(s){return encodeURIComponent(s)}
+
+function asegurarPestanas(){
+  return api('?fields=sheets.properties.title').then(function(m){
+    var have={};(m.sheets||[]).forEach(function(s){have[s.properties.title]=1});
+    var add=[TAB_N,TAB_T,TAB_P].filter(function(t){return !have[t]}).map(function(t){return {addSheet:{properties:{title:t}}}});
+    if(!add.length)return;
+    return api(':batchUpdate',{method:'POST',body:{requests:add}});
+  });
+}
+function cargar(){
+  conn='cargando';render(true);
+  asegurarPestanas().then(function(){
+    return api('/values:batchGet?ranges='+enc(TAB_N+'!A2:G')+'&ranges='+enc(TAB_T+'!A2:E')+'&ranges='+enc(TAB_P+'!A2:G'));
+  }).then(function(j){
+    var v=j.valueRanges||[];
+    S=parsear((v[0]||{}).values,(v[1]||{}).values,(v[2]||{}).values);
+    lenPrev={N:((v[0]||{}).values||[]).length+1,T:((v[1]||{}).values||[]).length+1,P:((v[2]||{}).values||[]).length+1};
+    cargado=true;conn='on';pendiente=false;errorGuardar=false;render(true);
+  }).catch(function(e){
+    if(e.code===401){conn='off';sessionStorage.removeItem('tt-seg-tok');toast('La sesión de Google venció. Volvé a conectar.')}
+    else{conn='error';errMsg=e.message||'Error desconocido'}
+    render(true);
+  });
+}
+
+var lenPrev={N:0,T:0,P:0};
+function guardar(){
+  if(!cargado||conn==='error')return;
+  if(guardando){pendiente=true;return}
+  guardando=true;pendiente=false;errorGuardar=false;render();
+  var d=serializar(S);
+  var data=[{range:TAB_N+'!A1',values:d.N},{range:TAB_T+'!A1',values:d.T},{range:TAB_P+'!A1',values:d.P}];
+  api('/values:batchUpdate',{method:'POST',body:{valueInputOption:'RAW',data:data}}).then(function(){
+    var clr=[];
+    [['N',TAB_N,'G'],['T',TAB_T,'E'],['P',TAB_P,'G']].forEach(function(x){
+      var n=d[x[0]].length, prev=lenPrev[x[0]];
+      if(prev>n)clr.push(x[1]+'!A'+(n+1)+':'+x[2]+prev);
+      lenPrev[x[0]]=n;
+    });
+    if(!clr.length)return;
+    return api('/values:batchClear',{method:'POST',body:{ranges:clr}});
+  }).then(function(){
+    guardando=false;render();
+    if(pendiente)guardar();
+  }).catch(function(e){
+    guardando=false;errorGuardar=true;
+    if(e.code===401){conn='vencida';toast('La sesión de Google venció. Reconectá para guardar.')}
+    else toast('No se pudo guardar en la planilla: '+(e.message||'error'));
+    render(true);
+  });
+}
+function programarGuardado(){
+  pendiente=true;errorGuardar=false;clearTimeout(saveT);
+  saveT=setTimeout(guardar,1200);
+  render();
+}
+window.addEventListener('beforeunload',function(e){if(pendiente||guardando||errorGuardar){e.preventDefault();e.returnValue=''}});
+
+/* ---------- datos ---------- */
+function write(col,id,data){
+  if(data===null)delete S[col][id]; else S[col][id]=data;
+  programarGuardado();
+}
+function typing(){var a=document.activeElement;return !!(a&&app.contains(a)&&a.matches('textarea,input[type=text]'))}
+function activos(){
+  return ordenTrab(S).filter(function(id){return !S.trabajos[id].archivado}).sort(function(a,b){
+    var x=S.trabajos[a].entrega||'9999', y=S.trabajos[b].entrega||'9999';
+    return x<y?-1:x>y?1:0;
+  });
+}
+function pendDe(tid,incluirHechos){
+  return Object.keys(S.pend).filter(function(id){var p=S.pend[id];return p.trabajoId===tid&&(incluirHechos||!p.hecho)}).sort(function(a,b){return (S.pend[a].creado||0)-(S.pend[b].creado||0)});
+}
+function dueInfo(e){
+  if(!e)return {txt:'Sin fecha de entrega',cls:''};
+  var d=Math.round((parse(e)-parse(hoyStr()))/864e5);
+  var rel=d<0?'vencida hace '+(-d)+' d':d===0?'hoy':d===1?'mañana':'en '+d+' d';
+  return {txt:'Entrega '+corto(e)+' · '+rel, cls:d<0?'crit':d<=7?'warn':'ok'};
+}
+function quienes(){
+  var m={};Object.keys(S.pend).forEach(function(id){var q=(S.pend[id].quien||'').trim();if(q)m[q]=1});
+  return Object.keys(m).sort();
+}
+
+/* ---------- vistas ---------- */
+function syncChip(){
+  var c='warn',t='';
+  if(conn==='vencida'){c='bad';t='Sesión vencida'}
+  else if(errorGuardar){c='bad';t='Sin guardar'}
+  else if(guardando){c='warn';t='Guardando…'}
+  else if(pendiente){c='warn';t='Cambios sin guardar'}
+  else{c='ok';t='Guardado en la planilla'}
+  return '<div class="sync '+c+'" role="status"><span class="dot"></span>'+t+'</div>';
+}
+function render(force){
+  if(!force&&typing()){dirty=true;return}
+  dirty=false;
+  if(!cargado){app.innerHTML=vistaPuerta();return}
+  var ids=activos();
+  var vistos=ids.filter(function(id){var n=S.notas[fecha+'_'+id];return n&&n.visto}).length;
+  var abiertos=Object.keys(S.pend).filter(function(id){return !S.pend[id].hecho&&S.trabajos[S.pend[id].trabajoId]&&!S.trabajos[S.pend[id].trabajoId].archivado}).length;
+  var prox=ids.filter(function(id){var e=S.trabajos[id].entrega;if(!e)return false;return Math.round((parse(e)-parse(hoyStr()))/864e5)<=7}).length;
+  var h='<div class="top"><div><div class="eyebrow">TT Global · Reunión de producción</div><h1>'+esc(tab==='dia'?largo(fecha):'Pendientes abiertos')+'</h1></div>';
+  if(tab==='dia')h+='<div class="nav"><button class="btn" data-act="prev" aria-label="Día anterior">‹</button><input type="date" id="f-fecha" value="'+fecha+'" aria-label="Fecha de la reunión"><button class="btn" data-act="next" aria-label="Día siguiente">›</button><button class="btn" data-act="hoy">Hoy</button></div>';
+  h+='</div>';
+  h+='<div class="tabs" role="tablist"><button class="tab" role="tab" data-act="tab" data-v="dia" aria-selected="'+(tab==='dia')+'">Reunión del día</button><button class="tab" role="tab" data-act="tab" data-v="pend" aria-selected="'+(tab==='pend')+'">Pendientes</button>'+syncChip()+'</div>';
+  if(conn==='vencida')h+='<div class="banner">La sesión de Google venció. Tus cambios siguen acá y se guardan al reconectar. <button class="btn primary" data-act="conectar">Reconectar</button></div>';
+  else if(errorGuardar)h+='<div class="banner">No se pudo guardar en la planilla. <button class="btn" data-act="reintentar">Reintentar</button></div>';
+  h+='<div class="stats"><span><b>'+ids.length+'</b> trabajos</span>'+(tab==='dia'?'<span><b>'+vistos+'/'+ids.length+'</b> vistos hoy</span>':'')+'<span><b>'+abiertos+'</b> pendientes abiertos</span><span><b>'+prox+'</b> entregan en 7 días o menos</span></div>';
+  h+= tab==='dia'?vistaDia(ids):vistaPend();
+  app.innerHTML=h;
+  app.querySelectorAll('textarea[data-nota]').forEach(grow);
+}
+function vistaPuerta(){
+  var h='<div class="eyebrow">TT Global · Reunión de producción</div><h1>Seguimiento diario</h1><div class="gate">';
+  if(conn==='cargando')return h+'<p style="margin-top:20px">Cargando datos de la planilla…</p></div>';
+  if(conn==='error')return h+'<h2>No se pudo leer la planilla</h2><p>'+esc(errMsg)+'</p><button class="btn primary" data-act="conectar">Volver a intentar</button></div>';
+  return h+'<h2>Conectá tu cuenta de Google</h2><p>Ingresá con la cuenta de la empresa que tiene acceso a la planilla "PRODUCCIÓN - Seguimiento reunión diaria". Lo que cargues acá se guarda en esa planilla, en las pestañas APP.</p><button class="btn primary" data-act="conectar">Conectar con Google</button></div>';
+}
+function vistaDia(ids){
+  var h='<form class="addbar" data-form="addtrab"><input type="text" id="nt-nombre" name="nombre" placeholder="Nuevo trabajo o equipo (ej. TT 4000)" aria-label="Nombre del trabajo"><input type="date" id="nt-entrega" name="entrega" aria-label="Fecha de entrega"><button class="btn primary" type="submit">Agregar trabajo</button></form>';
+  h+='<datalist id="dl-quien">'+quienes().map(function(q){return '<option value="'+esc(q)+'">'}).join('')+'</datalist>';
+  if(!ids.length)return h+'<p class="empty">Todavía no hay trabajos cargados. Agregá el primero arriba con su fecha de entrega y después anotá en cada uno lo que se habló en la reunión.</p>';
+  h+='<div class="filters"><button class="btn" data-act="copiar">Traer notas del último día cargado</button><button class="btn" data-act="recargar">Actualizar desde la planilla</button><label class="chk" for="c-hechos"><input type="checkbox" id="c-hechos" data-act="hechos" '+(verHechos?'checked':'')+'>Mostrar pendientes completados</label></div>';
+  ids.forEach(function(id){
+    var t=S.trabajos[id], n=S.notas[fecha+'_'+id]||{}, di=dueInfo(t.entrega);
+    h+='<section class="job" data-job="'+id+'"><div class="job-h"><div class="job-t"><h3>'+esc(t.nombre)+'</h3><span class="pill '+di.cls+'">'+esc(di.txt)+'</span></div>';
+    h+='<button class="visto" data-act="visto" data-id="'+id+'" aria-pressed="'+(!!n.visto)+'">'+(n.visto?'Visto':'Sin ver')+'</button></div>';
+    if(editId===id)h+='<div class="edit"><input type="text" id="e-nombre-'+id+'" value="'+esc(t.nombre)+'" aria-label="Nombre"><input type="date" id="e-entrega-'+id+'" value="'+esc(t.entrega||'')+'" aria-label="Fecha de entrega"><button class="btn primary" data-act="guardar" data-id="'+id+'">Guardar</button><button class="btn" data-act="cancelar">Cancelar</button></div>';
+    h+='<textarea id="n-'+id+'" data-nota="'+id+'" placeholder="Qué se habló hoy de este trabajo" aria-label="Nota del día para '+esc(t.nombre)+'">'+esc(n.texto||'')+'</textarea>';
+    var ps=pendDe(id,verHechos);
+    if(ps.length)h+='<ul class="pend">'+ps.map(function(pid){return itemPend(pid,false)}).join('')+'</ul>';
+    h+='<form class="addp" data-form="addp" data-t="'+id+'"><input type="text" id="p-texto-'+id+'" name="texto" placeholder="Nuevo pendiente" aria-label="Nuevo pendiente"><input type="text" id="p-quien-'+id+'" name="quien" list="dl-quien" placeholder="Quién / proveedor" aria-label="Responsable o proveedor"><button class="btn" type="submit">Agregar</button></form>';
+    h+='<div class="job-f"><button class="btn ghost" data-act="editar" data-id="'+id+'">Editar</button><button class="btn ghost" data-act="archivar" data-id="'+id+'">Archivar</button></div></section>';
+  });
+  return h;
+}
+function itemPend(pid,conTrabajo){
+  var p=S.pend[pid], t=S.trabajos[p.trabajoId];
+  return '<li class="'+(p.hecho?'done':'')+'"><input type="checkbox" id="pc-'+pid+'" data-act="hecho" data-id="'+pid+'" '+(p.hecho?'checked':'')+' aria-label="Marcar como hecho"><label class="tx" for="pc-'+pid+'">'+esc(p.texto)+(conTrabajo&&t?'<span class="job-tag">'+esc(t.nombre)+'</span>':'')+'</label>'+(!conTrabajo&&p.quien?'<span class="who">'+esc(p.quien)+'</span>':'')+'<button class="x" data-act="delp" data-id="'+pid+'" aria-label="Eliminar pendiente">×</button></li>';
+}
+function vistaPend(){
+  var qs=quienes();
+  var h='<datalist id="dl-quien">'+qs.map(function(q){return '<option value="'+esc(q)+'">'}).join('')+'</datalist>';
+  h+='<div class="filters"><label for="f-quien" class="chk">Ver de</label><select id="f-quien" data-act="filtro"><option value="">Todos</option>'+qs.map(function(q){return '<option '+(filtro===q?'selected':'')+'>'+esc(q)+'</option>'}).join('')+'<option value="__sin" '+(filtro==='__sin'?'selected':'')+'>Sin asignar</option></select><label class="chk" for="c-hechos2"><input type="checkbox" id="c-hechos2" data-act="hechos" '+(verHechos?'checked':'')+'>Mostrar completados</label></div>';
+  var ids=activos();
+  h+='<form class="addbar" data-form="addp2"><select id="ap-trabajo" name="trabajoId" aria-label="Trabajo">'+ids.map(function(id){return '<option value="'+id+'">'+esc(S.trabajos[id].nombre)+'</option>'}).join('')+'</select><input type="text" id="ap-texto" name="texto" placeholder="Nuevo pendiente" aria-label="Nuevo pendiente"><input type="text" id="ap-quien" name="quien" list="dl-quien" placeholder="Quién / proveedor" aria-label="Responsable o proveedor"><button class="btn primary" type="submit">Agregar</button></form>';
+  var grupos={};
+  Object.keys(S.pend).forEach(function(pid){
+    var p=S.pend[pid]; if(p.hecho&&!verHechos)return;
+    if(!S.trabajos[p.trabajoId]||S.trabajos[p.trabajoId].archivado)return;
+    var q=(p.quien||'').trim()||'__sin';
+    if(filtro&&filtro!==q)return;
+    (grupos[q]=grupos[q]||[]).push(pid);
+  });
+  var keys=Object.keys(grupos).sort(function(a,b){return a==='__sin'?1:b==='__sin'?-1:a.localeCompare(b)});
+  if(!keys.length)return h+'<p class="empty">No hay pendientes para mostrar con este filtro.</p>';
+  keys.forEach(function(q){
+    var l=grupos[q].sort(function(a,b){return (S.pend[a].creado||0)-(S.pend[b].creado||0)});
+    h+='<div class="group"><h2>'+esc(q==='__sin'?'Sin asignar':q)+'<span class="n">'+l.length+'</span></h2><ul class="pend">'+l.map(function(pid){return itemPend(pid,true)}).join('')+'</ul></div>';
+  });
+  return h;
+}
+
+/* ---------- eventos ---------- */
+function grow(t){t.style.height='auto';t.style.height=Math.max(92,t.scrollHeight+2)+'px'}
+function saveNota(tid,texto){
+  var k=fecha+'_'+tid, old=S.notas[k]||{};
+  if((old.texto||'')===texto)return;
+  write('notas',k,{fecha:fecha,trabajoId:tid,texto:texto,visto:!!old.visto});
+}
+app.addEventListener('input',function(e){
+  var t=e.target;
+  if(t.matches('textarea[data-nota]')){
+    grow(t);var id=t.dataset.nota;clearTimeout(timers[id]);
+    timers[id]=setTimeout(function(){saveNota(id,t.value)},600);
+  }
+});
+app.addEventListener('focusout',function(e){
+  var t=e.target;
+  if(t.matches&&t.matches('textarea[data-nota]')){var id=t.dataset.nota;clearTimeout(timers[id]);saveNota(id,t.value)}
+  setTimeout(function(){if(dirty&&!typing())render(true)},80);
+});
+app.addEventListener('change',function(e){
+  var t=e.target;
+  if(t.id==='f-fecha'&&t.value){fecha=t.value;render(true)}
+  else if(t.dataset.act==='filtro'){filtro=t.value;render(true)}
+  else if(t.dataset.act==='hechos'){verHechos=t.checked;render(true)}
+  else if(t.dataset.act==='hecho'){var p=S.pend[t.dataset.id];if(p){write('pend',t.dataset.id,Object.assign({},p,{hecho:t.checked}));render(true)}}
+});
+app.addEventListener('click',function(e){
+  var b=e.target.closest('[data-act]'); if(!b||b.tagName==='INPUT'||b.tagName==='SELECT')return;
+  var a=b.dataset.act, id=b.dataset.id;
+  if(a==='conectar'){conectar();return}
+  if(a==='reintentar'){guardar();return}
+  if(a==='recargar'){
+    if(pendiente||guardando||errorGuardar){toast('Hay cambios sin guardar. Esperá a que se guarden y volvé a probar.');return}
+    cargar();return;
+  }
+  if(a==='prev')fecha=addDias(fecha,-1);
+  else if(a==='next')fecha=addDias(fecha,1);
+  else if(a==='hoy')fecha=hoyStr();
+  else if(a==='tab')tab=b.dataset.v;
+  else if(a==='visto'){var k=fecha+'_'+id,o=S.notas[k]||{};write('notas',k,{fecha:fecha,trabajoId:id,texto:o.texto||'',visto:!o.visto})}
+  else if(a==='delp')write('pend',id,null);
+  else if(a==='editar')editId=id;
+  else if(a==='cancelar')editId=null;
+  else if(a==='guardar'){
+    var nom=document.getElementById('e-nombre-'+id).value.trim(), ent=document.getElementById('e-entrega-'+id).value;
+    if(!nom){toast('El trabajo necesita un nombre.');return}
+    write('trabajos',id,Object.assign({},S.trabajos[id],{nombre:nom,entrega:ent}));editId=null;
+  }
+  else if(a==='archivar'){write('trabajos',id,Object.assign({},S.trabajos[id],{archivado:true}));toast('Trabajo archivado. Sus notas quedan guardadas en la planilla.')}
+  else if(a==='copiar'){copiar();return}
+  render(true);
+});
+app.addEventListener('submit',function(e){
+  e.preventDefault();
+  var f=e.target, k=f.dataset.form, fd=new FormData(f);
+  var texto=String(fd.get('texto')||'').trim(), quien=String(fd.get('quien')||'').trim();
+  if(k==='addtrab'){
+    var nombre=String(fd.get('nombre')||'').trim();
+    if(!nombre){toast('Escribí el nombre del trabajo.');return}
+    write('trabajos',uid(),{nombre:nombre,entrega:String(fd.get('entrega')||''),archivado:false,creado:Date.now()});
+    render(true);
+  } else if(k==='addp'||k==='addp2'){
+    var tid=k==='addp'?f.dataset.t:String(fd.get('trabajoId')||'');
+    if(!texto||!tid){toast('Escribí el pendiente y elegí el trabajo.');return}
+    write('pend',uid(),{trabajoId:tid,texto:texto,quien:quien,hecho:false,creado:Date.now()});
+    render(true);
+    var nx=document.getElementById(k==='addp'?'p-texto-'+tid:'ap-texto'); if(nx)nx.focus();
+  }
+});
+function copiar(){
+  var dias={};Object.keys(S.notas).forEach(function(k){var n=S.notas[k];if(n.fecha&&n.fecha<fecha&&n.texto)dias[n.fecha]=1});
+  var prev=Object.keys(dias).sort().pop();
+  if(!prev){toast('No hay días anteriores con notas.');return}
+  var c=0;
+  activos().forEach(function(id){
+    var a=S.notas[prev+'_'+id], b=S.notas[fecha+'_'+id];
+    if(a&&a.texto&&!(b&&b.texto)){S.notas[fecha+'_'+id]={fecha:fecha,trabajoId:id,texto:a.texto,visto:false};c++}
+  });
+  if(c)programarGuardado();
+  toast(c?'Se copiaron '+c+' notas del '+corto(prev)+'.':'No había notas nuevas para copiar.');
+  render(true);
+}
+
+/* ---------- arranque ---------- */
+render(true);
+try{
+  var st=JSON.parse(sessionStorage.getItem('tt-seg-tok')||'null');
+  if(st&&st.t&&st.e>Date.now()){tok=st.t;tokExp=st.e;cargar()}
+}catch(e){}
+var gs=document.createElement('script');
+gs.src='https://accounts.google.com/gsi/client';gs.async=true;gs.defer=true;
+gs.onload=function(){initAuth()};
+document.head.appendChild(gs);
+})();
+</script>
+</body>
+</html>
