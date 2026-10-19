@@ -76,6 +76,18 @@ textarea{display:block; width:100%; margin-top:12px; background:var(--surface); 
 .addp{display:flex; flex-wrap:wrap; gap:8px; margin-top:8px}
 .addp input[type=text]:first-child{flex:2 1 200px}
 .addp input[type=text]:nth-child(2){flex:1 1 130px}
+.job-r{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+select.est{font-weight:600; font-size:14px; min-height:34px; padding:3px 10px; border-radius:99px}
+select.est.e1{background:var(--warn-bg); color:var(--warn-fg); border-color:transparent}
+select.est.e2{background:var(--crit-bg); color:var(--crit-fg); border-color:transparent}
+select.est.e3{background:var(--ok-bg); color:var(--ok-fg); border-color:transparent}
+.job.cumplida{opacity:.72}
+.pend li{flex-wrap:wrap}
+.pend li > .com,.pend li > .comf{flex:1 0 100%; margin-left:29px; max-width:calc(100% - 29px)}
+.com{background:none; border:0; text-align:left; padding:0 0 2px; color:var(--muted); font-style:italic; font-size:14px; overflow-wrap:anywhere}
+.com:hover{color:var(--fg)}
+.comf{display:flex; flex-wrap:wrap; gap:8px}
+.comf input[type=text]{flex:1 1 220px}
 .job-f{display:flex; gap:4px; margin-top:6px; justify-content:flex-end}
 .edit{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
 .edit input[type=text]{flex:1 1 220px}
@@ -106,9 +118,11 @@ var CLIENT_ID='842107814510-32fpvqs6cttkeldsf1llo0r7r1q4qpnc.apps.googleusercont
 var SHEET_ID='11P-qBA8VabY7Ez4Ia0kHrqRKUsQP_m1Gi7vmmiUal34';
 var SCOPE='https://www.googleapis.com/auth/spreadsheets';
 var API='https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID;
-var TAB_N='APP', TAB_T='APP_TRABAJOS', TAB_P='APP_PENDIENTES';
+var TAB_N='APP', TAB_T='APP_TRABAJOS', TAB_P='APP_PENDIENTES', TAB_R='APP_RESUMEN';
+var SID={};
 
 //PURE-START
+var ESTADOS=['En curso','Esperando material','Demorada','Cumplida'];
 function pad(n){return String(n).padStart(2,'0')}
 function fmt(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}
 function parse(s){var p=s.split('-').map(Number);return new Date(p[0],p[1]-1,p[2])}
@@ -121,21 +135,25 @@ function unes(s){
 }
 function si(v){return /^s[ií]/i.test(String(v==null?'':v).trim())}
 function cell(r,i){return r&&r[i]!=null?String(r[i]):''}
+function estadoDe(t){return ESTADOS.indexOf(t&&t.estado)>=0?t.estado:'En curso'}
 function ordenTrab(S){
   return Object.keys(S.trabajos).sort(function(a,b){
     var x=S.trabajos[a], y=S.trabajos[b];
     return (x.creado||0)-(y.creado||0)||String(x.nombre).localeCompare(String(y.nombre));
   });
 }
+function pendAbiertos(S,tid){
+  return Object.keys(S.pend).filter(function(id){var p=S.pend[id];return p.trabajoId===tid&&!p.hecho}).sort(function(a,b){return (S.pend[a].creado||0)-(S.pend[b].creado||0)});
+}
 function serializar(S){
   var ids=ordenTrab(S), pos={};
   ids.forEach(function(id,i){pos[id]=i});
-  var T=[['ID','Trabajo','Entrega','Archivado','Creado']];
-  ids.forEach(function(id){var t=S.trabajos[id];T.push([id,t.nombre||'',es(t.entrega),t.archivado?'Sí':'No',t.creado||0])});
-  var P=[['ID','ID trabajo','Trabajo','Pendiente','Responsable','Hecho','Creado']];
+  var T=[['ID','Trabajo','Entrega','Archivado','Creado','Estado']];
+  ids.forEach(function(id){var t=S.trabajos[id];T.push([id,t.nombre||'',es(t.entrega),t.archivado?'Sí':'No',t.creado||0,estadoDe(t)])});
+  var P=[['ID','ID trabajo','Trabajo','Pendiente','Responsable','Hecho','Creado','Comentario']];
   Object.keys(S.pend).sort(function(a,b){return (S.pend[a].creado||0)-(S.pend[b].creado||0)}).forEach(function(id){
     var p=S.pend[id], t=S.trabajos[p.trabajoId];
-    P.push([id,p.trabajoId||'',t?t.nombre:'',p.texto||'',p.quien||'',p.hecho?'Sí':'No',p.creado||0]);
+    P.push([id,p.trabajoId||'',t?t.nombre:'',p.texto||'',p.quien||'',p.hecho?'Sí':'No',p.creado||0,p.comentario||'']);
   });
   var N=[['Fecha','Trabajo','Entrega','Visto','Nota del día','Pendientes abiertos','ID trabajo']];
   Object.keys(S.notas).filter(function(k){var n=S.notas[k];return S.trabajos[n.trabajoId]&&(n.texto||n.visto)}).sort(function(a,b){
@@ -144,7 +162,7 @@ function serializar(S){
     return pos[x.trabajoId]-pos[y.trabajoId];
   }).forEach(function(k){
     var n=S.notas[k], t=S.trabajos[n.trabajoId];
-    var ab=Object.keys(S.pend).filter(function(pid){var p=S.pend[pid];return p.trabajoId===n.trabajoId&&!p.hecho}).sort(function(a,b){return (S.pend[a].creado||0)-(S.pend[b].creado||0)}).map(function(pid){var p=S.pend[pid];return '- '+p.texto+(p.quien?' ('+p.quien+')':'')}).join('\n');
+    var ab=pendAbiertos(S,n.trabajoId).map(function(pid){var p=S.pend[pid];return '- '+p.texto+(p.quien?' ('+p.quien+')':'')+(p.comentario?' — '+p.comentario:'')}).join('\n');
     N.push([es(n.fecha),t.nombre||'',es(t.entrega),n.visto?'Sí':'No',n.texto||'',ab,n.trabajoId]);
   });
   return {N:N,T:T,P:P};
@@ -153,11 +171,12 @@ function parsear(vN,vT,vP){
   var S={trabajos:{},notas:{},pend:{}};
   (vT||[]).forEach(function(r){
     var id=cell(r,0).trim(); if(!id||!cell(r,1).trim())return;
-    S.trabajos[id]={nombre:cell(r,1).trim(),entrega:unes(cell(r,2)),archivado:si(cell(r,3)),creado:Number(cell(r,4))||0};
+    var e=cell(r,5).trim();
+    S.trabajos[id]={nombre:cell(r,1).trim(),entrega:unes(cell(r,2)),archivado:si(cell(r,3)),creado:Number(cell(r,4))||0,estado:ESTADOS.indexOf(e)>=0?e:'En curso'};
   });
   (vP||[]).forEach(function(r){
     var id=cell(r,0).trim(), tid=cell(r,1).trim(); if(!id||!tid||!cell(r,3).trim())return;
-    S.pend[id]={trabajoId:tid,texto:cell(r,3),quien:cell(r,4).trim(),hecho:si(cell(r,5)),creado:Number(cell(r,6))||0};
+    S.pend[id]={trabajoId:tid,texto:cell(r,3),quien:cell(r,4).trim(),hecho:si(cell(r,5)),creado:Number(cell(r,6))||0,comentario:cell(r,7).trim()};
   });
   (vN||[]).forEach(function(r){
     var f=unes(cell(r,0)), tid=cell(r,6).trim(); if(!f||!tid||!S.trabajos[tid])return;
@@ -165,13 +184,37 @@ function parsear(vN,vT,vP){
   });
   return S;
 }
+function resumen(S,hoy){
+  var R=[],tit=[];
+  function t(x){tit.push(R.length);R.push([x])}
+  t('RESUMEN DEL '+es(hoy)); R.push([]);
+  var vivos=ordenTrab(S).filter(function(id){var x=S.trabajos[id];return !x.archivado&&estadoDe(x)!=='Cumplida'});
+  t('ENTREGAS EN 7 DÍAS O MENOS (incluye vencidas)');
+  R.push(['Trabajo','Entrega','Días','Estado','Pendientes abiertos']);
+  var prox=vivos.filter(function(id){var e=S.trabajos[id].entrega;return e&&Math.round((parse(e)-parse(hoy))/864e5)<=7}).sort(function(a,b){return S.trabajos[a].entrega<S.trabajos[b].entrega?-1:1});
+  if(!prox.length)R.push(['Ninguna']);
+  prox.forEach(function(id){var x=S.trabajos[id],d=Math.round((parse(x.entrega)-parse(hoy))/864e5);R.push([x.nombre,es(x.entrega),d<0?'vencida hace '+(-d)+' d':d+' d',estadoDe(x),pendAbiertos(S,id).length])});
+  R.push([]);
+  t('PENDIENTES ABIERTOS POR RESPONSABLE');
+  R.push(['Responsable','Pendiente','Trabajo','Comentario']);
+  var g=[];
+  Object.keys(S.pend).forEach(function(pid){var p=S.pend[pid];if(p.hecho)return;var x=S.trabajos[p.trabajoId];if(!x||x.archivado||estadoDe(x)==='Cumplida')return;g.push([p.quien||'Sin asignar',p.texto,x.nombre,p.comentario||'',p.creado||0])});
+  g.sort(function(a,b){if(a[0]===b[0])return a[4]-b[4];if(a[0]==='Sin asignar')return 1;if(b[0]==='Sin asignar')return -1;return a[0].localeCompare(b[0])});
+  if(!g.length)R.push(['Ninguno']);
+  g.forEach(function(r){R.push(r.slice(0,4))});
+  R.push([]);
+  t('TRABAJOS POR ESTADO');
+  R.push(['Estado','Cantidad']);
+  ESTADOS.forEach(function(e){R.push([e,ordenTrab(S).filter(function(id){var x=S.trabajos[id];return !x.archivado&&estadoDe(x)===e}).length])});
+  return {rows:R,titulos:tit};
+}
 //PURE-END
 
 var S={trabajos:{},notas:{},pend:{}};
 var tok=null, tokExp=0, tc=null;
 var conn='off';          // off | cargando | on | vencida | error
 var cargado=false, guardando=false, pendiente=false, errorGuardar=false, errMsg='';
-var fecha=hoyStr(), tab='dia', editId=null, verHechos=false, filtro='', dirty=false;
+var fecha=hoyStr(), tab='dia', editId=null, comId=null, verCumplidas=false, verHechos=false, filtro='', dirty=false;
 var app=document.getElementById('app'), timers={}, toastT=null, saveT=null;
 
 function hoyStr(){return fmt(new Date())}
@@ -216,22 +259,50 @@ function api(path,opt){
 function enc(s){return encodeURIComponent(s)}
 
 function asegurarPestanas(){
-  return api('?fields=sheets.properties.title').then(function(m){
-    var have={};(m.sheets||[]).forEach(function(s){have[s.properties.title]=1});
-    var add=[TAB_N,TAB_T,TAB_P].filter(function(t){return !have[t]}).map(function(t){return {addSheet:{properties:{title:t}}}});
+  return api('?fields=sheets.properties(sheetId,title)').then(function(m){
+    var have={};(m.sheets||[]).forEach(function(x){have[x.properties.title]=x.properties.sheetId});
+    var add=[TAB_N,TAB_T,TAB_P,TAB_R].filter(function(t){return have[t]==null}).map(function(t){return {addSheet:{properties:{title:t}}}});
+    SID=have;
     if(!add.length)return;
-    return api(':batchUpdate',{method:'POST',body:{requests:add}});
+    return api(':batchUpdate',{method:'POST',body:{requests:add}}).then(function(r){
+      (r.replies||[]).forEach(function(x){if(x.addSheet)SID[x.addSheet.properties.title]=x.addSheet.properties.sheetId});
+    });
   });
+}
+var ANCHOS={};
+ANCHOS[TAB_N]=[95,150,95,60,520,380,110];
+ANCHOS[TAB_T]=[110,200,95,85,70,140];
+ANCHOS[TAB_P]=[60,110,160,380,130,60,90,300];
+ANCHOS[TAB_R]=[200,380,170,300,160];
+function aplicarFormato(){
+  var rq=[];
+  Object.keys(ANCHOS).forEach(function(t){
+    var id=SID[t]; if(id==null)return;
+    rq.push({updateSheetProperties:{properties:{sheetId:id,gridProperties:{frozenRowCount:t===TAB_R?0:1}},fields:'gridProperties.frozenRowCount'}});
+    rq.push({repeatCell:{range:{sheetId:id,startRowIndex:t===TAB_R?0:1},cell:{userEnteredFormat:{wrapStrategy:'WRAP',verticalAlignment:'TOP'}},fields:'userEnteredFormat(wrapStrategy,verticalAlignment)'}});
+    if(t!==TAB_R)rq.push({repeatCell:{range:{sheetId:id,startRowIndex:0,endRowIndex:1},cell:{userEnteredFormat:{backgroundColor:{red:0.18,green:0.42,blue:0.24},textFormat:{bold:true,foregroundColor:{red:1,green:1,blue:1}},verticalAlignment:'MIDDLE'}},fields:'userEnteredFormat(backgroundColor,textFormat,verticalAlignment)'}});
+    ANCHOS[t].forEach(function(w,i){rq.push({updateDimensionProperties:{range:{sheetId:id,dimension:'COLUMNS',startIndex:i,endIndex:i+1},properties:{pixelSize:w},fields:'pixelSize'}})});
+  });
+  return api(':batchUpdate',{method:'POST',body:{requests:rq}}).catch(function(){});
+}
+function formatoResumen(tit){
+  var id=SID[TAB_R]; if(id==null)return Promise.resolve();
+  var rq=[{repeatCell:{range:{sheetId:id,startRowIndex:0,endRowIndex:300},cell:{userEnteredFormat:{textFormat:{bold:false},backgroundColor:{red:1,green:1,blue:1}}},fields:'userEnteredFormat(textFormat,backgroundColor)'}}];
+  tit.forEach(function(r){
+    rq.push({repeatCell:{range:{sheetId:id,startRowIndex:r,endRowIndex:r+1},cell:{userEnteredFormat:{textFormat:{bold:true,fontSize:12},backgroundColor:{red:0.86,green:0.92,blue:0.85}}},fields:'userEnteredFormat(textFormat,backgroundColor)'}});
+    rq.push({repeatCell:{range:{sheetId:id,startRowIndex:r+1,endRowIndex:r+2},cell:{userEnteredFormat:{textFormat:{bold:true}}},fields:'userEnteredFormat.textFormat.bold'}});
+  });
+  return api(':batchUpdate',{method:'POST',body:{requests:rq}}).catch(function(){});
 }
 function cargar(){
   conn='cargando';render(true);
   asegurarPestanas().then(function(){
-    return api('/values:batchGet?ranges='+enc(TAB_N+'!A2:G')+'&ranges='+enc(TAB_T+'!A2:E')+'&ranges='+enc(TAB_P+'!A2:G'));
+    return api('/values:batchGet?ranges='+enc(TAB_N+'!A2:G')+'&ranges='+enc(TAB_T+'!A2:F')+'&ranges='+enc(TAB_P+'!A2:H'));
   }).then(function(j){
     var v=j.valueRanges||[];
     S=parsear((v[0]||{}).values,(v[1]||{}).values,(v[2]||{}).values);
-    lenPrev={N:((v[0]||{}).values||[]).length+1,T:((v[1]||{}).values||[]).length+1,P:((v[2]||{}).values||[]).length+1};
-    cargado=true;conn='on';pendiente=false;errorGuardar=false;render(true);
+    lenPrev={N:((v[0]||{}).values||[]).length+1,T:((v[1]||{}).values||[]).length+1,P:((v[2]||{}).values||[]).length+1,R:200};
+    cargado=true;conn='on';pendiente=false;errorGuardar=false;lenPrev.R=200;render(true);aplicarFormato();
   }).catch(function(e){
     if(e.code===401){conn='off';sessionStorage.removeItem('tt-seg-tok');toast('La sesión de Google venció. Volvé a conectar.')}
     else{conn='error';errMsg=e.message||'Error desconocido'}
@@ -239,22 +310,24 @@ function cargar(){
   });
 }
 
-var lenPrev={N:0,T:0,P:0};
+var lenPrev={N:0,T:0,P:0,R:0};
 function guardar(){
   if(!cargado||conn==='error')return;
   if(guardando){pendiente=true;return}
   guardando=true;pendiente=false;errorGuardar=false;render();
-  var d=serializar(S);
-  var data=[{range:TAB_N+'!A1',values:d.N},{range:TAB_T+'!A1',values:d.T},{range:TAB_P+'!A1',values:d.P}];
+  var d=serializar(S), rs=resumen(S,hoyStr()); d.R=rs.rows;
+  var data=[{range:TAB_N+'!A1',values:d.N},{range:TAB_T+'!A1',values:d.T},{range:TAB_P+'!A1',values:d.P},{range:TAB_R+'!A1',values:d.R}];
   api('/values:batchUpdate',{method:'POST',body:{valueInputOption:'RAW',data:data}}).then(function(){
     var clr=[];
-    [['N',TAB_N,'G'],['T',TAB_T,'E'],['P',TAB_P,'G']].forEach(function(x){
+    [['N',TAB_N,'G'],['T',TAB_T,'F'],['P',TAB_P,'H'],['R',TAB_R,'E']].forEach(function(x){
       var n=d[x[0]].length, prev=lenPrev[x[0]];
       if(prev>n)clr.push(x[1]+'!A'+(n+1)+':'+x[2]+prev);
       lenPrev[x[0]]=n;
     });
     if(!clr.length)return;
     return api('/values:batchClear',{method:'POST',body:{ranges:clr}});
+  }).then(function(){
+    return formatoResumen(rs.titulos);
   }).then(function(){
     guardando=false;render();
     if(pendiente)guardar();
@@ -279,7 +352,7 @@ function write(col,id,data){
 }
 function typing(){var a=document.activeElement;return !!(a&&app.contains(a)&&a.matches('textarea,input[type=text]'))}
 function activos(){
-  return ordenTrab(S).filter(function(id){return !S.trabajos[id].archivado}).sort(function(a,b){
+  return ordenTrab(S).filter(function(id){var t=S.trabajos[id];return !t.archivado&&(verCumplidas||estadoDe(t)!=='Cumplida')}).sort(function(a,b){
     var x=S.trabajos[a].entrega||'9999', y=S.trabajos[b].entrega||'9999';
     return x<y?-1:x>y?1:0;
   });
@@ -314,7 +387,8 @@ function render(force){
   if(!cargado){app.innerHTML=vistaPuerta();return}
   var ids=activos();
   var vistos=ids.filter(function(id){var n=S.notas[fecha+'_'+id];return n&&n.visto}).length;
-  var abiertos=Object.keys(S.pend).filter(function(id){return !S.pend[id].hecho&&S.trabajos[S.pend[id].trabajoId]&&!S.trabajos[S.pend[id].trabajoId].archivado}).length;
+  var abiertos=Object.keys(S.pend).filter(function(id){var t=S.trabajos[S.pend[id].trabajoId];return !S.pend[id].hecho&&t&&!t.archivado&&(verCumplidas||estadoDe(t)!=='Cumplida')}).length;
+  var cump=Object.keys(S.trabajos).filter(function(id){var t=S.trabajos[id];return !t.archivado&&estadoDe(t)==='Cumplida'}).length;
   var prox=ids.filter(function(id){var e=S.trabajos[id].entrega;if(!e)return false;return Math.round((parse(e)-parse(hoyStr()))/864e5)<=7}).length;
   var h='<div class="top"><div><div class="eyebrow">TT Global · Reunión de producción</div><h1>'+esc(tab==='dia'?largo(fecha):'Pendientes abiertos')+'</h1></div>';
   if(tab==='dia')h+='<div class="nav"><button class="btn" data-act="prev" aria-label="Día anterior">‹</button><input type="date" id="f-fecha" value="'+fecha+'" aria-label="Fecha de la reunión"><button class="btn" data-act="next" aria-label="Día siguiente">›</button><button class="btn" data-act="hoy">Hoy</button></div>';
@@ -322,7 +396,7 @@ function render(force){
   h+='<div class="tabs" role="tablist"><button class="tab" role="tab" data-act="tab" data-v="dia" aria-selected="'+(tab==='dia')+'">Reunión del día</button><button class="tab" role="tab" data-act="tab" data-v="pend" aria-selected="'+(tab==='pend')+'">Pendientes</button>'+syncChip()+'</div>';
   if(conn==='vencida')h+='<div class="banner">La sesión de Google venció. Tus cambios siguen acá y se guardan al reconectar. <button class="btn primary" data-act="conectar">Reconectar</button></div>';
   else if(errorGuardar)h+='<div class="banner">No se pudo guardar en la planilla. <button class="btn" data-act="reintentar">Reintentar</button></div>';
-  h+='<div class="stats"><span><b>'+ids.length+'</b> trabajos</span>'+(tab==='dia'?'<span><b>'+vistos+'/'+ids.length+'</b> vistos hoy</span>':'')+'<span><b>'+abiertos+'</b> pendientes abiertos</span><span><b>'+prox+'</b> entregan en 7 días o menos</span></div>';
+  h+='<div class="stats"><span><b>'+ids.length+'</b> trabajos</span>'+(tab==='dia'?'<span><b>'+vistos+'/'+ids.length+'</b> vistos hoy</span>':'')+'<span><b>'+abiertos+'</b> pendientes abiertos</span><span><b>'+prox+'</b> entregan en 7 días o menos</span><span><b>'+cump+'</b> cumplidas</span></div>';
   h+= tab==='dia'?vistaDia(ids):vistaPend();
   app.innerHTML=h;
   app.querySelectorAll('textarea[data-nota]').forEach(grow);
@@ -336,12 +410,13 @@ function vistaPuerta(){
 function vistaDia(ids){
   var h='<form class="addbar" data-form="addtrab"><input type="text" id="nt-nombre" name="nombre" placeholder="Nuevo trabajo o equipo (ej. TT 4000)" aria-label="Nombre del trabajo"><input type="date" id="nt-entrega" name="entrega" aria-label="Fecha de entrega"><button class="btn primary" type="submit">Agregar trabajo</button></form>';
   h+='<datalist id="dl-quien">'+quienes().map(function(q){return '<option value="'+esc(q)+'">'}).join('')+'</datalist>';
-  if(!ids.length)return h+'<p class="empty">Todavía no hay trabajos cargados. Agregá el primero arriba con su fecha de entrega y después anotá en cada uno lo que se habló en la reunión.</p>';
-  h+='<div class="filters"><button class="btn" data-act="copiar">Traer notas del último día cargado</button><button class="btn" data-act="recargar">Actualizar desde la planilla</button><label class="chk" for="c-hechos"><input type="checkbox" id="c-hechos" data-act="hechos" '+(verHechos?'checked':'')+'>Mostrar pendientes completados</label></div>';
+  if(!Object.keys(S.trabajos).length)return h+'<p class="empty">Todavía no hay trabajos cargados. Agregá el primero arriba con su fecha de entrega y después anotá en cada uno lo que se habló en la reunión.</p>';
+  h+='<div class="filters"><button class="btn" data-act="copiar">Traer notas del último día cargado</button><button class="btn" data-act="recargar">Actualizar desde la planilla</button><label class="chk" for="c-hechos"><input type="checkbox" id="c-hechos" data-act="hechos" '+(verHechos?'checked':'')+'>Mostrar pendientes completados</label><label class="chk" for="c-cump"><input type="checkbox" id="c-cump" data-act="cumplidas" '+(verCumplidas?'checked':'')+'>Mostrar cumplidas</label></div>';
+  if(!ids.length)return h+'<p class="empty">No hay trabajos para mostrar. Activá «Mostrar cumplidas» o agregá uno nuevo.</p>';
   ids.forEach(function(id){
-    var t=S.trabajos[id], n=S.notas[fecha+'_'+id]||{}, di=dueInfo(t.entrega);
-    h+='<section class="job" data-job="'+id+'"><div class="job-h"><div class="job-t"><h3>'+esc(t.nombre)+'</h3><span class="pill '+di.cls+'">'+esc(di.txt)+'</span></div>';
-    h+='<button class="visto" data-act="visto" data-id="'+id+'" aria-pressed="'+(!!n.visto)+'">'+(n.visto?'Visto':'Sin ver')+'</button></div>';
+    var t=S.trabajos[id], n=S.notas[fecha+'_'+id]||{}, di=dueInfo(t.entrega), est=estadoDe(t);
+    h+='<section class="job'+(est==='Cumplida'?' cumplida':'')+'" data-job="'+id+'"><div class="job-h"><div class="job-t"><h3>'+esc(t.nombre)+'</h3><span class="pill '+di.cls+'">'+esc(di.txt)+'</span></div>';
+    h+='<div class="job-r"><select id="est-'+id+'" class="est e'+ESTADOS.indexOf(est)+'" data-act="estado" data-id="'+id+'" aria-label="Estado de '+esc(t.nombre)+'">'+ESTADOS.map(function(e){return '<option'+(e===est?' selected':'')+'>'+e+'</option>'}).join('')+'</select><button class="visto" data-act="visto" data-id="'+id+'" aria-pressed="'+(!!n.visto)+'">'+(n.visto?'Visto':'Sin ver')+'</button></div></div>';
     if(editId===id)h+='<div class="edit"><input type="text" id="e-nombre-'+id+'" value="'+esc(t.nombre)+'" aria-label="Nombre"><input type="date" id="e-entrega-'+id+'" value="'+esc(t.entrega||'')+'" aria-label="Fecha de entrega"><button class="btn primary" data-act="guardar" data-id="'+id+'">Guardar</button><button class="btn" data-act="cancelar">Cancelar</button></div>';
     h+='<textarea id="n-'+id+'" data-nota="'+id+'" placeholder="Qué se habló hoy de este trabajo" aria-label="Nota del día para '+esc(t.nombre)+'">'+esc(n.texto||'')+'</textarea>';
     var ps=pendDe(id,verHechos);
@@ -352,19 +427,25 @@ function vistaDia(ids){
   return h;
 }
 function itemPend(pid,conTrabajo){
-  var p=S.pend[pid], t=S.trabajos[p.trabajoId];
-  return '<li class="'+(p.hecho?'done':'')+'"><input type="checkbox" id="pc-'+pid+'" data-act="hecho" data-id="'+pid+'" '+(p.hecho?'checked':'')+' aria-label="Marcar como hecho"><label class="tx" for="pc-'+pid+'">'+esc(p.texto)+(conTrabajo&&t?'<span class="job-tag">'+esc(t.nombre)+'</span>':'')+'</label>'+(!conTrabajo&&p.quien?'<span class="who">'+esc(p.quien)+'</span>':'')+'<button class="x" data-act="delp" data-id="'+pid+'" aria-label="Eliminar pendiente">×</button></li>';
+  var p=S.pend[pid], t=S.trabajos[p.trabajoId], h;
+  h='<li class="'+(p.hecho?'done':'')+'"><input type="checkbox" id="pc-'+pid+'" data-act="hecho" data-id="'+pid+'" '+(p.hecho?'checked':'')+' aria-label="Marcar como hecho"><label class="tx" for="pc-'+pid+'">'+esc(p.texto)+(conTrabajo&&t?'<span class="job-tag">'+esc(t.nombre)+'</span>':'')+'</label>'+(!conTrabajo&&p.quien?'<span class="who">'+esc(p.quien)+'</span>':'');
+  if(!p.comentario&&comId!==pid)h+='<button class="btn ghost" data-act="comentar" data-id="'+pid+'">Comentar</button>';
+  h+='<button class="x" data-act="delp" data-id="'+pid+'" aria-label="Eliminar pendiente">×</button>';
+  if(comId===pid)h+='<form class="comf" data-form="com" data-id="'+pid+'"><input type="text" id="com-'+pid+'" name="comentario" value="'+esc(p.comentario||'')+'" placeholder="Comentario sobre este pendiente" aria-label="Comentario"><button class="btn primary" type="submit">Guardar</button><button class="btn" type="button" data-act="cancelarcom">Cancelar</button></form>';
+  else if(p.comentario)h+='<button class="com" data-act="comentar" data-id="'+pid+'" title="Editar comentario">'+esc(p.comentario)+'</button>';
+  return h+'</li>';
 }
 function vistaPend(){
   var qs=quienes();
   var h='<datalist id="dl-quien">'+qs.map(function(q){return '<option value="'+esc(q)+'">'}).join('')+'</datalist>';
-  h+='<div class="filters"><label for="f-quien" class="chk">Ver de</label><select id="f-quien" data-act="filtro"><option value="">Todos</option>'+qs.map(function(q){return '<option '+(filtro===q?'selected':'')+'>'+esc(q)+'</option>'}).join('')+'<option value="__sin" '+(filtro==='__sin'?'selected':'')+'>Sin asignar</option></select><label class="chk" for="c-hechos2"><input type="checkbox" id="c-hechos2" data-act="hechos" '+(verHechos?'checked':'')+'>Mostrar completados</label></div>';
+  h+='<div class="filters"><label for="f-quien" class="chk">Ver de</label><select id="f-quien" data-act="filtro"><option value="">Todos</option>'+qs.map(function(q){return '<option '+(filtro===q?'selected':'')+'>'+esc(q)+'</option>'}).join('')+'<option value="__sin" '+(filtro==='__sin'?'selected':'')+'>Sin asignar</option></select><label class="chk" for="c-hechos2"><input type="checkbox" id="c-hechos2" data-act="hechos" '+(verHechos?'checked':'')+'>Mostrar completados</label><label class="chk" for="c-cump2"><input type="checkbox" id="c-cump2" data-act="cumplidas" '+(verCumplidas?'checked':'')+'>De trabajos cumplidos</label></div>';
   var ids=activos();
   h+='<form class="addbar" data-form="addp2"><select id="ap-trabajo" name="trabajoId" aria-label="Trabajo">'+ids.map(function(id){return '<option value="'+id+'">'+esc(S.trabajos[id].nombre)+'</option>'}).join('')+'</select><input type="text" id="ap-texto" name="texto" placeholder="Nuevo pendiente" aria-label="Nuevo pendiente"><input type="text" id="ap-quien" name="quien" list="dl-quien" placeholder="Quién / proveedor" aria-label="Responsable o proveedor"><button class="btn primary" type="submit">Agregar</button></form>';
   var grupos={};
   Object.keys(S.pend).forEach(function(pid){
     var p=S.pend[pid]; if(p.hecho&&!verHechos)return;
     if(!S.trabajos[p.trabajoId]||S.trabajos[p.trabajoId].archivado)return;
+    if(!verCumplidas&&estadoDe(S.trabajos[p.trabajoId])==='Cumplida')return;
     var q=(p.quien||'').trim()||'__sin';
     if(filtro&&filtro!==q)return;
     (grupos[q]=grupos[q]||[]).push(pid);
@@ -402,6 +483,8 @@ app.addEventListener('change',function(e){
   if(t.id==='f-fecha'&&t.value){fecha=t.value;render(true)}
   else if(t.dataset.act==='filtro'){filtro=t.value;render(true)}
   else if(t.dataset.act==='hechos'){verHechos=t.checked;render(true)}
+  else if(t.dataset.act==='cumplidas'){verCumplidas=t.checked;render(true)}
+  else if(t.dataset.act==='estado'){var tr=S.trabajos[t.dataset.id];if(tr){write('trabajos',t.dataset.id,Object.assign({},tr,{estado:t.value}));if(t.value==='Cumplida'&&!verCumplidas)toast('Marcada como cumplida. Se oculta de la lista; la ves con «Mostrar cumplidas».');render(true)}}
   else if(t.dataset.act==='hecho'){var p=S.pend[t.dataset.id];if(p){write('pend',t.dataset.id,Object.assign({},p,{hecho:t.checked}));render(true)}}
 });
 app.addEventListener('click',function(e){
@@ -419,6 +502,8 @@ app.addEventListener('click',function(e){
   else if(a==='tab')tab=b.dataset.v;
   else if(a==='visto'){var k=fecha+'_'+id,o=S.notas[k]||{};write('notas',k,{fecha:fecha,trabajoId:id,texto:o.texto||'',visto:!o.visto})}
   else if(a==='delp')write('pend',id,null);
+  else if(a==='comentar')comId=id;
+  else if(a==='cancelarcom')comId=null;
   else if(a==='editar')editId=id;
   else if(a==='cancelar')editId=null;
   else if(a==='guardar'){
@@ -429,20 +514,26 @@ app.addEventListener('click',function(e){
   else if(a==='archivar'){write('trabajos',id,Object.assign({},S.trabajos[id],{archivado:true}));toast('Trabajo archivado. Sus notas quedan guardadas en la planilla.')}
   else if(a==='copiar'){copiar();return}
   render(true);
+  if(comId){var ci=document.getElementById('com-'+comId);if(ci)ci.focus()}
 });
 app.addEventListener('submit',function(e){
   e.preventDefault();
   var f=e.target, k=f.dataset.form, fd=new FormData(f);
   var texto=String(fd.get('texto')||'').trim(), quien=String(fd.get('quien')||'').trim();
+  if(k==='com'){
+    var pc=S.pend[f.dataset.id];
+    if(pc){write('pend',f.dataset.id,Object.assign({},pc,{comentario:String(fd.get('comentario')||'').trim()}))}
+    comId=null;render(true);return;
+  }
   if(k==='addtrab'){
     var nombre=String(fd.get('nombre')||'').trim();
     if(!nombre){toast('Escribí el nombre del trabajo.');return}
-    write('trabajos',uid(),{nombre:nombre,entrega:String(fd.get('entrega')||''),archivado:false,creado:Date.now()});
+    write('trabajos',uid(),{nombre:nombre,entrega:String(fd.get('entrega')||''),archivado:false,creado:Date.now(),estado:'En curso'});
     render(true);
   } else if(k==='addp'||k==='addp2'){
     var tid=k==='addp'?f.dataset.t:String(fd.get('trabajoId')||'');
     if(!texto||!tid){toast('Escribí el pendiente y elegí el trabajo.');return}
-    write('pend',uid(),{trabajoId:tid,texto:texto,quien:quien,hecho:false,creado:Date.now()});
+    write('pend',uid(),{trabajoId:tid,texto:texto,quien:quien,hecho:false,creado:Date.now(),comentario:''});
     render(true);
     var nx=document.getElementById(k==='addp'?'p-texto-'+tid:'ap-texto'); if(nx)nx.focus();
   }
