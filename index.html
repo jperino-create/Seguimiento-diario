@@ -40,7 +40,7 @@ h1{font-family:var(--font-display); font-weight:700; font-size:34px; line-height
 .btn.primary{background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:600}
 .btn.ghost{background:transparent; border-color:transparent; color:var(--muted); padding:4px 8px; min-height:30px; font-size:14px}
 .btn.ghost:hover{color:var(--fg)}
-input[type=text],input[type=date],select{background:var(--surface); border:1px solid var(--line); border-radius:6px; padding:7px 10px; min-height:38px; min-width:0}
+input[type=text],input[type=date],input[type=time],select{background:var(--surface); border:1px solid var(--line); border-radius:6px; padding:7px 10px; min-height:38px; min-width:0}
 .tabs{display:flex; gap:22px; margin-top:22px; border-bottom:1px solid var(--line); align-items:flex-end}
 .tab{background:none; border:0; border-bottom:3px solid transparent; padding:8px 0; font-family:var(--font-display); font-weight:600; font-size:18px; color:var(--muted)}
 .tab[aria-selected=true]{color:var(--fg); border-bottom-color:var(--accent)}
@@ -76,6 +76,14 @@ textarea{display:block; width:100%; margin-top:12px; background:var(--surface); 
 .addp{display:flex; flex-wrap:wrap; gap:8px; margin-top:8px}
 .addp input[type=text]:first-child{flex:2 1 200px}
 .addp input[type=text]:nth-child(2){flex:1 1 130px}
+.ag{list-style:none; margin:0 0 8px; padding:0; display:grid; gap:1px}
+.ag li{display:grid; grid-template-columns:96px 1fr auto; gap:10px; padding:5px 0; align-items:baseline}
+.ag-dia{font-family:var(--font-display); font-weight:600; font-size:16px; margin-top:14px; color:var(--muted)}
+.ag-h{font-variant-numeric:tabular-nums; color:var(--muted); font-size:14px}
+.ag-t{min-width:0; overflow-wrap:anywhere}
+.ag-c{font-size:13px; color:var(--muted); display:flex; gap:6px; align-items:center; justify-self:end; text-align:right}
+.ag-c i{width:9px; height:9px; border-radius:50%; display:inline-block; flex:none}
+@media (max-width:520px){.ag li{grid-template-columns:78px 1fr}.ag-c{grid-column:2; justify-self:start}}
 .job-r{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
 select.est{font-weight:600; font-size:14px; min-height:34px; padding:3px 10px; border-radius:99px}
 select.est.e1{background:var(--warn-bg); color:var(--warn-fg); border-color:transparent}
@@ -116,7 +124,8 @@ select.est.e3{background:var(--ok-bg); color:var(--ok-fg); border-color:transpar
 'use strict';
 var CLIENT_ID='842107814510-32fpvqs6cttkeldsf1llo0r7r1q4qpnc.apps.googleusercontent.com';
 var SHEET_ID='11P-qBA8VabY7Ez4Ia0kHrqRKUsQP_m1Gi7vmmiUal34';
-var SCOPE='https://www.googleapis.com/auth/spreadsheets';
+var SCOPE='https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.calendarlist.readonly';
+var CAL='https://www.googleapis.com/calendar/v3';
 var API='https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID;
 var TAB_N='APP', TAB_T='APP_TRABAJOS', TAB_P='APP_PENDIENTES', TAB_R='APP_RESUMEN';
 var SID={};
@@ -211,6 +220,7 @@ function resumen(S,hoy){
 //PURE-END
 
 var S={trabajos:{},notas:{},pend:{}};
+var cal={estado:'idle',tareas:[],agenda:[],error:'',verHechas:false};
 var tok=null, tokExp=0, tc=null;
 var conn='off';          // off | cargando | on | vencida | error
 var cargado=false, guardando=false, pendiente=false, errorGuardar=false, errMsg='';
@@ -239,13 +249,13 @@ function initAuth(){
 function onTok(r){
   if(!r||r.error||!r.access_token){toast('Google no autorizó el acceso.');conn=cargado?'vencida':'off';render(true);return}
   tok=r.access_token; tokExp=Date.now()+((r.expires_in||3600)-90)*1000;
-  try{sessionStorage.setItem('tt-seg-tok',JSON.stringify({t:tok,e:tokExp}))}catch(e){}
+  try{sessionStorage.setItem('tt-seg-tok2',JSON.stringify({t:tok,e:tokExp}))}catch(e){}
   if(cargado){conn='on';render(true);if(pendiente||errorGuardar)guardar()}
   else cargar();
 }
-function conectar(){
+function conectar(consent){
   if(!initAuth()){toast('Todavía no cargó el servicio de Google. Esperá unos segundos y probá de nuevo.');return}
-  tc.requestAccessToken({prompt:tok?'':'select_account'});
+  tc.requestAccessToken({prompt:consent?'consent':(tok?'':'select_account')});
 }
 function api(path,opt){
   opt=opt||{};
@@ -304,7 +314,7 @@ function cargar(){
     lenPrev={N:((v[0]||{}).values||[]).length+1,T:((v[1]||{}).values||[]).length+1,P:((v[2]||{}).values||[]).length+1,R:200};
     cargado=true;conn='on';pendiente=false;errorGuardar=false;lenPrev.R=200;render(true);aplicarFormato();
   }).catch(function(e){
-    if(e.code===401){conn='off';sessionStorage.removeItem('tt-seg-tok');toast('La sesión de Google venció. Volvé a conectar.')}
+    if(e.code===401){conn='off';sessionStorage.removeItem('tt-seg-tok2');toast('La sesión de Google venció. Volvé a conectar.')}
     else{conn='error';errMsg=e.message||'Error desconocido'}
     render(true);
   });
@@ -390,14 +400,14 @@ function render(force){
   var abiertos=Object.keys(S.pend).filter(function(id){var t=S.trabajos[S.pend[id].trabajoId];return !S.pend[id].hecho&&t&&!t.archivado&&(verCumplidas||estadoDe(t)!=='Cumplida')}).length;
   var cump=Object.keys(S.trabajos).filter(function(id){var t=S.trabajos[id];return !t.archivado&&estadoDe(t)==='Cumplida'}).length;
   var prox=ids.filter(function(id){var e=S.trabajos[id].entrega;if(!e)return false;return Math.round((parse(e)-parse(hoyStr()))/864e5)<=7}).length;
-  var h='<div class="top"><div><div class="eyebrow">TT Global · Reunión de producción</div><h1>'+esc(tab==='dia'?largo(fecha):'Pendientes abiertos')+'</h1></div>';
+  var h='<div class="top"><div><div class="eyebrow">TT Global · Reunión de producción</div><h1>'+esc(tab==='dia'?largo(fecha):tab==='mis'?'Mis tareas':'Pendientes abiertos')+'</h1></div>';
   if(tab==='dia')h+='<div class="nav"><button class="btn" data-act="prev" aria-label="Día anterior">‹</button><input type="date" id="f-fecha" value="'+fecha+'" aria-label="Fecha de la reunión"><button class="btn" data-act="next" aria-label="Día siguiente">›</button><button class="btn" data-act="hoy">Hoy</button></div>';
   h+='</div>';
-  h+='<div class="tabs" role="tablist"><button class="tab" role="tab" data-act="tab" data-v="dia" aria-selected="'+(tab==='dia')+'">Reunión del día</button><button class="tab" role="tab" data-act="tab" data-v="pend" aria-selected="'+(tab==='pend')+'">Pendientes</button>'+syncChip()+'</div>';
+  h+='<div class="tabs" role="tablist"><button class="tab" role="tab" data-act="tab" data-v="dia" aria-selected="'+(tab==='dia')+'">Reunión del día</button><button class="tab" role="tab" data-act="tab" data-v="pend" aria-selected="'+(tab==='pend')+'">Pendientes</button><button class="tab" role="tab" data-act="tab" data-v="mis" aria-selected="'+(tab==='mis')+'">Mis tareas</button>'+syncChip()+'</div>';
   if(conn==='vencida')h+='<div class="banner">La sesión de Google venció. Tus cambios siguen acá y se guardan al reconectar. <button class="btn primary" data-act="conectar">Reconectar</button></div>';
   else if(errorGuardar)h+='<div class="banner">No se pudo guardar en la planilla. <button class="btn" data-act="reintentar">Reintentar</button></div>';
-  h+='<div class="stats"><span><b>'+ids.length+'</b> trabajos</span>'+(tab==='dia'?'<span><b>'+vistos+'/'+ids.length+'</b> vistos hoy</span>':'')+'<span><b>'+abiertos+'</b> pendientes abiertos</span><span><b>'+prox+'</b> entregan en 7 días o menos</span><span><b>'+cump+'</b> cumplidas</span></div>';
-  h+= tab==='dia'?vistaDia(ids):vistaPend();
+  if(tab!=='mis')h+='<div class="stats"><span><b>'+ids.length+'</b> trabajos</span>'+(tab==='dia'?'<span><b>'+vistos+'/'+ids.length+'</b> vistos hoy</span>':'')+'<span><b>'+abiertos+'</b> pendientes abiertos</span><span><b>'+prox+'</b> entregan en 7 días o menos</span><span><b>'+cump+'</b> cumplidas</span></div>';
+  h+= tab==='dia'?vistaDia(ids):tab==='mis'?vistaMis():vistaPend();
   app.innerHTML=h;
   app.querySelectorAll('textarea[data-nota]').forEach(grow);
 }
@@ -484,6 +494,8 @@ app.addEventListener('change',function(e){
   else if(t.dataset.act==='filtro'){filtro=t.value;render(true)}
   else if(t.dataset.act==='hechos'){verHechos=t.checked;render(true)}
   else if(t.dataset.act==='cumplidas'){verCumplidas=t.checked;render(true)}
+  else if(t.dataset.act==='verhechas'){cal.verHechas=t.checked;render(true)}
+  else if(t.dataset.act==='thecha'){marcarTarea(t.dataset.id,t.checked)}
   else if(t.dataset.act==='estado'){var tr=S.trabajos[t.dataset.id];if(tr){write('trabajos',t.dataset.id,Object.assign({},tr,{estado:t.value}));if(t.value==='Cumplida'&&!verCumplidas)toast('Marcada como cumplida. Se oculta de la lista; la ves con «Mostrar cumplidas».');render(true)}}
   else if(t.dataset.act==='hecho'){var p=S.pend[t.dataset.id];if(p){write('pend',t.dataset.id,Object.assign({},p,{hecho:t.checked}));render(true)}}
 });
@@ -492,6 +504,9 @@ app.addEventListener('click',function(e){
   var a=b.dataset.act, id=b.dataset.id;
   if(a==='conectar'){conectar();return}
   if(a==='reintentar'){guardar();return}
+  if(a==='calconectar'){conectar(true);return}
+  if(a==='calrecargar'){cargarCal();return}
+  if(a==='deltarea'){borrarTarea(id);return}
   if(a==='recargar'){
     if(pendiente||guardando||errorGuardar){toast('Hay cambios sin guardar. Esperá a que se guarden y volvé a probar.');return}
     cargar();return;
@@ -499,7 +514,7 @@ app.addEventListener('click',function(e){
   if(a==='prev')fecha=addDias(fecha,-1);
   else if(a==='next')fecha=addDias(fecha,1);
   else if(a==='hoy')fecha=hoyStr();
-  else if(a==='tab')tab=b.dataset.v;
+  else if(a==='tab'){tab=b.dataset.v;if(tab==='mis'&&cal.estado==='idle'&&conn==='on')cargarCal()}
   else if(a==='visto'){var k=fecha+'_'+id,o=S.notas[k]||{};write('notas',k,{fecha:fecha,trabajoId:id,texto:o.texto||'',visto:!o.visto})}
   else if(a==='delp')write('pend',id,null);
   else if(a==='comentar')comId=id;
@@ -525,6 +540,7 @@ app.addEventListener('submit',function(e){
     if(pc){write('pend',f.dataset.id,Object.assign({},pc,{comentario:String(fd.get('comentario')||'').trim()}))}
     comId=null;render(true);return;
   }
+  if(k==='tarea'){crearTarea({titulo:fd.get('titulo'),fecha:fd.get('fecha'),hora:fd.get('hora'),dur:fd.get('dur'),nota:fd.get('nota')});return}
   if(k==='addtrab'){
     var nombre=String(fd.get('nombre')||'').trim();
     if(!nombre){toast('Escribí el nombre del trabajo.');return}
@@ -552,10 +568,114 @@ function copiar(){
   render(true);
 }
 
+/* ---------- Mis tareas + calendario ---------- */
+function gcal(path,opt){
+  opt=opt||{};
+  if(!tok||Date.now()>tokExp){conn=cargado?'vencida':'off';var e0=new Error('sesion');e0.code=401;return Promise.reject(e0)}
+  return fetch(CAL+path,{method:opt.method||'GET',headers:Object.assign({'Authorization':'Bearer '+tok},opt.body?{'Content-Type':'application/json'}:{}),body:opt.body?JSON.stringify(opt.body):undefined}).then(function(r){
+    if(r.status===401){tok=null;conn=cargado?'vencida':'off';var e1=new Error('sesion');e1.code=401;throw e1}
+    if(r.status===204)return {};
+    return r.json().catch(function(){return {}}).then(function(j){
+      if(!r.ok){var e2=new Error((j.error&&j.error.message)||('Error '+r.status));e2.code=r.status;e2.reason=j.error&&j.error.errors&&j.error.errors[0]&&j.error.errors[0].reason;throw e2}
+      return j;
+    });
+  });
+}
+function errCal(e){
+  if(e.code===401){cal.estado='idle';toast('La sesión de Google venció. Reconectá.')}
+  else if(e.code===403&&/insufficient|scope/i.test((e.reason||'')+' '+e.message))cal.estado='sinpermiso';
+  else{cal.estado='error';cal.error=e.message||'Error desconocido'}
+  render(true);
+}
+function evTarea(e){
+  var st=e.start||{}, en=e.end||{}, pv=(e.extendedProperties&&e.extendedProperties.private)||{};
+  var dia,hora='',dur=0;
+  if(st.dateTime){var d=new Date(st.dateTime);dia=fmt(d);hora=pad(d.getHours())+':'+pad(d.getMinutes());dur=Math.round((new Date(en.dateTime)-d)/60000)}
+  else dia=st.date;
+  var sum=e.summary||'';
+  return {id:e.id,titulo:sum.replace(/^✓ /,''),dia:dia,hora:hora,dur:dur,nota:e.description||'',hecha:pv.hecha==='1'};
+}
+function evAgenda(x){
+  var e=x.e, st=e.start||{}, en=e.end||{}, dia, hora='', fin='';
+  if(st.dateTime){var d=new Date(st.dateTime), f=new Date(en.dateTime);dia=fmt(d);hora=pad(d.getHours())+':'+pad(d.getMinutes());fin=pad(f.getHours())+':'+pad(f.getMinutes())}
+  else dia=st.date;
+  return {dia:dia,hora:hora,fin:fin,titulo:e.summary||'(sin título)',cal:x.c.summaryOverride||x.c.summary||'',color:x.c.backgroundColor||''};
+}
+function cargarCal(){
+  if(!tok){return}
+  cal.estado='cargando';render(true);
+  var hoy0=new Date(); hoy0=new Date(hoy0.getFullYear(),hoy0.getMonth(),hoy0.getDate());
+  var iso=function(ms){return new Date(ms).toISOString()};
+  var p1=gcal('/calendars/primary/events?singleEvents=true&orderBy=startTime&maxResults=250&privateExtendedProperty='+enc('ttTarea=1')+'&timeMin='+enc(iso(hoy0.getTime()-14*864e5))+'&timeMax='+enc(iso(hoy0.getTime()+180*864e5)));
+  var p2=gcal('/users/me/calendarList?minAccessRole=reader&maxResults=100').then(function(l){
+    return Promise.all((l.items||[]).map(function(c){
+      return gcal('/calendars/'+enc(c.id)+'/events?singleEvents=true&orderBy=startTime&maxResults=60&timeMin='+enc(iso(hoy0.getTime()))+'&timeMax='+enc(iso(hoy0.getTime()+8*864e5))).then(function(r){
+        return (r.items||[]).filter(function(e){var pv=(e.extendedProperties&&e.extendedProperties.private)||{};return e.status!=='cancelled'&&pv.ttTarea!=='1'}).map(function(e){return {e:e,c:c}});
+      }).catch(function(){return []});
+    }));
+  });
+  Promise.all([p1,p2]).then(function(r){
+    cal.tareas=(r[0].items||[]).filter(function(e){return e.status!=='cancelled'}).map(evTarea);
+    cal.agenda=[].concat.apply([],r[1]).map(evAgenda).sort(function(a,b){return (a.dia+(a.hora||'00:00'))<(b.dia+(b.hora||'00:00'))?-1:1});
+    cal.estado='ok';render(true);
+  }).catch(errCal);
+}
+function etiquetaDia(d){var h=hoyStr();if(d===h)return 'Hoy';if(d===addDias(h,1))return 'Mañana';return largo(d)}
+function vistaMis(){
+  if(cal.estado==='idle'||cal.estado==='cargando')return '<p class="empty">Leyendo tu calendario…</p>';
+  if(cal.estado==='sinpermiso')return '<div class="banner">Google no te dio acceso al calendario. Reconectá y aceptá el permiso de Calendar. <button class="btn primary" data-act="calconectar">Reconectar con permiso</button></div>';
+  if(cal.estado==='error')return '<div class="banner">No se pudo leer el calendario: '+esc(cal.error)+' <button class="btn" data-act="calrecargar">Reintentar</button></div><p class="empty">Si el mensaje dice que la API no está habilitada, hay que habilitar Google Calendar API en el proyecto de Google Cloud de la app y volver a probar.</p>';
+  var h='<p class="empty" style="margin-top:14px">Estas tareas se guardan solo en tu Google Calendar. No se escriben en la planilla de producción.</p>';
+  h+='<form class="addbar" data-form="tarea"><input type="text" id="mt-titulo" name="titulo" placeholder="Nueva tarea" aria-label="Título de la tarea"><input type="date" id="mt-fecha" name="fecha" value="'+hoyStr()+'" aria-label="Fecha"><input type="time" id="mt-hora" name="hora" aria-label="Hora (opcional)"><select id="mt-dur" name="dur" aria-label="Duración"><option value="15">15 min</option><option value="30" selected>30 min</option><option value="60">1 h</option><option value="120">2 h</option></select><input type="text" id="mt-nota" name="nota" placeholder="Nota (opcional)" aria-label="Nota"><button class="btn primary" type="submit">Crear en el calendario</button></form>';
+  var pend=cal.tareas.filter(function(t){return !t.hecha}).sort(function(a,b){return (a.dia+(a.hora||'00:00'))<(b.dia+(b.hora||'00:00'))?-1:1});
+  var hechas=cal.tareas.filter(function(t){return t.hecha});
+  h+='<div class="filters"><label class="chk" for="c-hechas"><input type="checkbox" id="c-hechas" data-act="verhechas" '+(cal.verHechas?'checked':'')+'>Mostrar hechas ('+hechas.length+')</label><button class="btn ghost" data-act="calrecargar">Actualizar</button></div>';
+  var lista=cal.verHechas?pend.concat(hechas):pend;
+  if(!lista.length)h+='<p class="empty">No tenés tareas pendientes. Creá una arriba y aparece en tu calendario.</p>';
+  var dias={};lista.forEach(function(t){(dias[t.dia]=dias[t.dia]||[]).push(t)});
+  Object.keys(dias).sort().forEach(function(d){
+    h+='<div class="group"><h2>'+esc(etiquetaDia(d))+'<span class="n">'+dias[d].length+'</span></h2><ul class="pend">'+dias[d].map(function(t){
+      return '<li class="'+(t.hecha?'done':'')+'"><input type="checkbox" id="tc-'+t.id+'" data-act="thecha" data-id="'+t.id+'" '+(t.hecha?'checked':'')+' aria-label="Marcar como hecha"><label class="tx" for="tc-'+t.id+'">'+esc(t.titulo)+(t.nota?'<span class="job-tag">'+esc(t.nota)+'</span>':'')+'</label>'+(t.hora?'<span class="who">'+t.hora+'</span>':'')+'<button class="x" data-act="deltarea" data-id="'+t.id+'" aria-label="Eliminar tarea">×</button></li>';
+    }).join('')+'</ul></div>';
+  });
+  h+='<div class="group"><h2>Tu agenda, próximos 7 días<span class="n">todos tus calendarios</span></h2>';
+  if(!cal.agenda.length)h+='<p class="empty" style="margin-top:8px">No hay eventos en tus calendarios para esos días.</p>';
+  var ad={};cal.agenda.forEach(function(e){(ad[e.dia]=ad[e.dia]||[]).push(e)});
+  Object.keys(ad).sort().forEach(function(d){
+    h+='<div class="ag-dia">'+esc(etiquetaDia(d))+'</div><ul class="ag">'+ad[d].map(function(e){
+      return '<li><span class="ag-h">'+(e.hora?e.hora+(e.fin?'–'+e.fin:''):'Todo el día')+'</span><span class="ag-t">'+esc(e.titulo)+'</span><span class="ag-c"><i style="background:'+esc(e.color||'#888')+'"></i>'+esc(e.cal)+'</span></li>';
+    }).join('')+'</ul>';
+  });
+  return h+'</div>';
+}
+function crearTarea(f){
+  var titulo=String(f.titulo||'').trim(); if(!titulo){toast('Escribí qué tenés que hacer.');return}
+  var dia=f.fecha||hoyStr(), hora=f.hora||'', dur=Number(f.dur)||30, tz=Intl.DateTimeFormat().resolvedOptions().timeZone;
+  var body={summary:titulo,description:String(f.nota||'').trim(),extendedProperties:{'private':{ttTarea:'1',hecha:'0'}},reminders:{useDefault:true}};
+  if(hora){
+    var ini=new Date(dia+'T'+hora+':00'), fin=new Date(ini.getTime()+dur*60000);
+    var loc=function(d){return fmt(d)+'T'+pad(d.getHours())+':'+pad(d.getMinutes())+':00'};
+    body.start={dateTime:loc(ini),timeZone:tz};body.end={dateTime:loc(fin),timeZone:tz};
+  } else {body.start={date:dia};body.end={date:addDias(dia,1)}}
+  gcal('/calendars/primary/events',{method:'POST',body:body}).then(function(){toast('Tarea creada en tu calendario.');cargarCal()}).catch(function(e){
+    if(e.code===401){cal.estado='idle';toast('La sesión de Google venció. Reconectá.');render(true)}
+    else toast('No se pudo crear la tarea: '+(e.message||'error'));
+  });
+}
+function marcarTarea(id,hecha){
+  var t=cal.tareas.filter(function(x){return x.id===id})[0]; if(!t)return;
+  t.hecha=hecha;render(true);
+  gcal('/calendars/primary/events/'+enc(id),{method:'PATCH',body:{summary:(hecha?'✓ ':'')+t.titulo,extendedProperties:{'private':{hecha:hecha?'1':'0'}}}}).catch(function(e){t.hecha=!hecha;render(true);toast('No se pudo actualizar la tarea: '+(e.message||'error'))});
+}
+function borrarTarea(id){
+  var prev=cal.tareas;cal.tareas=prev.filter(function(x){return x.id!==id});render(true);
+  gcal('/calendars/primary/events/'+enc(id),{method:'DELETE'}).catch(function(e){cal.tareas=prev;render(true);toast('No se pudo eliminar la tarea: '+(e.message||'error'))});
+}
+
 /* ---------- arranque ---------- */
 render(true);
 try{
-  var st=JSON.parse(sessionStorage.getItem('tt-seg-tok')||'null');
+  var st=JSON.parse(sessionStorage.getItem('tt-seg-tok2')||'null');
   if(st&&st.t&&st.e>Date.now()){tok=st.t;tokExp=st.e;cargar()}
 }catch(e){}
 var gs=document.createElement('script');
