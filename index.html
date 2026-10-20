@@ -224,6 +224,8 @@ var cal={estado:'idle',tareas:[],agenda:[],error:'',verHechas:false};
 var tok=null, tokExp=0, tc=null;
 var conn='off';          // off | cargando | on | vencida | error
 var cargado=false, guardando=false, pendiente=false, errorGuardar=false, errMsg='';
+var orden=(function(){try{return localStorage.getItem('tt-seg-orden')==='manual'?'manual':'fecha'}catch(e){return 'fecha'}})();
+function setOrden(v){orden=v;try{localStorage.setItem('tt-seg-orden',v)}catch(e){}}
 var fecha=hoyStr(), tab='dia', editId=null, comId=null, verCumplidas=false, verHechos=false, filtro='', dirty=false;
 var app=document.getElementById('app'), timers={}, toastT=null, saveT=null;
 
@@ -363,6 +365,7 @@ function write(col,id,data){
 function typing(){var a=document.activeElement;return !!(a&&app.contains(a)&&a.matches('textarea,input[type=text]'))}
 function activos(){
   return ordenTrab(S).filter(function(id){var t=S.trabajos[id];return !t.archivado&&(verCumplidas||estadoDe(t)!=='Cumplida')}).sort(function(a,b){
+    if(orden==='manual')return 0;
     var x=S.trabajos[a].entrega||'9999', y=S.trabajos[b].entrega||'9999';
     return x<y?-1:x>y?1:0;
   });
@@ -421,7 +424,7 @@ function vistaDia(ids){
   var h='<form class="addbar" data-form="addtrab"><input type="text" id="nt-nombre" name="nombre" placeholder="Nuevo trabajo o equipo (ej. TT 4000)" aria-label="Nombre del trabajo"><input type="date" id="nt-entrega" name="entrega" aria-label="Fecha de entrega"><button class="btn primary" type="submit">Agregar trabajo</button></form>';
   h+='<datalist id="dl-quien">'+quienes().map(function(q){return '<option value="'+esc(q)+'">'}).join('')+'</datalist>';
   if(!Object.keys(S.trabajos).length)return h+'<p class="empty">Todavía no hay trabajos cargados. Agregá el primero arriba con su fecha de entrega y después anotá en cada uno lo que se habló en la reunión.</p>';
-  h+='<div class="filters"><button class="btn" data-act="copiar">Traer notas del último día cargado</button><button class="btn" data-act="recargar">Actualizar desde la planilla</button><label class="chk" for="c-hechos"><input type="checkbox" id="c-hechos" data-act="hechos" '+(verHechos?'checked':'')+'>Mostrar pendientes completados</label><label class="chk" for="c-cump"><input type="checkbox" id="c-cump" data-act="cumplidas" '+(verCumplidas?'checked':'')+'>Mostrar cumplidas</label></div>';
+  h+='<div class="filters"><button class="btn" data-act="copiar">Traer notas del último día cargado</button><button class="btn" data-act="recargar">Actualizar desde la planilla</button><label class="chk" for="c-hechos"><input type="checkbox" id="c-hechos" data-act="hechos" '+(verHechos?'checked':'')+'>Mostrar pendientes completados</label><button class="btn" data-act="ordenmodo" title="Cambiar entre orden por fecha de entrega y orden manual">Orden: '+(orden==='manual'?'manual (volver a por entrega)':'por entrega')+'</button><label class="chk" for="c-cump"><input type="checkbox" id="c-cump" data-act="cumplidas" '+(verCumplidas?'checked':'')+'>Mostrar cumplidas</label></div>';
   if(!ids.length)return h+'<p class="empty">No hay trabajos para mostrar. Activá «Mostrar cumplidas» o agregá uno nuevo.</p>';
   ids.forEach(function(id){
     var t=S.trabajos[id], n=S.notas[fecha+'_'+id]||{}, di=dueInfo(t.entrega), est=estadoDe(t);
@@ -432,7 +435,7 @@ function vistaDia(ids){
     var ps=pendDe(id,verHechos);
     if(ps.length)h+='<ul class="pend">'+ps.map(function(pid){return itemPend(pid,false)}).join('')+'</ul>';
     h+='<form class="addp" data-form="addp" data-t="'+id+'"><input type="text" id="p-texto-'+id+'" name="texto" placeholder="Nuevo pendiente" aria-label="Nuevo pendiente"><input type="text" id="p-quien-'+id+'" name="quien" list="dl-quien" placeholder="Quién / proveedor" aria-label="Responsable o proveedor"><button class="btn" type="submit">Agregar</button></form>';
-    h+='<div class="job-f"><button class="btn ghost" data-act="editar" data-id="'+id+'">Editar</button><button class="btn ghost" data-act="archivar" data-id="'+id+'">Archivar</button></div></section>';
+    h+='<div class="job-f"><button class="btn ghost" data-act="mover" data-d="-1" data-id="'+id+'" aria-label="Subir '+esc(t.nombre)+' en la lista">↑ Subir</button><button class="btn ghost" data-act="mover" data-d="1" data-id="'+id+'" aria-label="Bajar '+esc(t.nombre)+' en la lista">↓ Bajar</button><button class="btn ghost" data-act="editar" data-id="'+id+'">Editar</button><button class="btn ghost" data-act="archivar" data-id="'+id+'">Archivar</button></div></section>';
   });
   return h;
 }
@@ -440,6 +443,7 @@ function itemPend(pid,conTrabajo){
   var p=S.pend[pid], t=S.trabajos[p.trabajoId], h;
   h='<li class="'+(p.hecho?'done':'')+'"><input type="checkbox" id="pc-'+pid+'" data-act="hecho" data-id="'+pid+'" '+(p.hecho?'checked':'')+' aria-label="Marcar como hecho"><label class="tx" for="pc-'+pid+'">'+esc(p.texto)+(conTrabajo&&t?'<span class="job-tag">'+esc(t.nombre)+'</span>':'')+'</label>'+(!conTrabajo&&p.quien?'<span class="who">'+esc(p.quien)+'</span>':'');
   if(!p.comentario&&comId!==pid)h+='<button class="btn ghost" data-act="comentar" data-id="'+pid+'">Comentar</button>';
+  if(!conTrabajo)h+='<button class="x" data-act="movep" data-d="-1" data-id="'+pid+'" aria-label="Subir pendiente">↑</button><button class="x" data-act="movep" data-d="1" data-id="'+pid+'" aria-label="Bajar pendiente">↓</button>';
   h+='<button class="x" data-act="delp" data-id="'+pid+'" aria-label="Eliminar pendiente">×</button>';
   if(comId===pid)h+='<form class="comf" data-form="com" data-id="'+pid+'"><input type="text" id="com-'+pid+'" name="comentario" value="'+esc(p.comentario||'')+'" placeholder="Comentario sobre este pendiente" aria-label="Comentario"><button class="btn primary" type="submit">Guardar</button><button class="btn" type="button" data-act="cancelarcom">Cancelar</button></form>';
   else if(p.comentario)h+='<button class="com" data-act="comentar" data-id="'+pid+'" title="Editar comentario">'+esc(p.comentario)+'</button>';
@@ -517,6 +521,22 @@ app.addEventListener('click',function(e){
   else if(a==='tab'){tab=b.dataset.v;if(tab==='mis'&&cal.estado==='idle'&&conn==='on')cargarCal()}
   else if(a==='visto'){var k=fecha+'_'+id,o=S.notas[k]||{};write('notas',k,{fecha:fecha,trabajoId:id,texto:o.texto||'',visto:!o.visto})}
   else if(a==='delp')write('pend',id,null);
+  else if(a==='ordenmodo'){setOrden(orden==='manual'?'fecha':'manual');render(true)}
+  else if(a==='mover'||a==='movep'){
+    var d=Number(b.dataset.d), esT=a==='mover', col=esT?'trabajos':'pend', lista;
+    if(esT){
+      lista=activos();
+      if(orden!=='manual'){lista.forEach(function(k,i){S.trabajos[k]=Object.assign({},S.trabajos[k],{creado:i+1-1e6})});setOrden('manual')}
+    } else lista=pendDe(S.pend[id].trabajoId,verHechos);
+    var i0=lista.indexOf(id), i1=i0+d;
+    if(i0>=0&&i1>=0&&i1<lista.length){
+      var o=lista[i1], A=S[col][id], B=S[col][o], ca=A.creado||0, cb=B.creado||0;
+      if(ca===cb)cb=ca+d;
+      write(col,id,Object.assign({},A,{creado:cb}));write(col,o,Object.assign({},B,{creado:ca}));
+    } else programarGuardado();
+    render(true);
+    var nb=app.querySelector('[data-act='+a+'][data-d="'+b.dataset.d+'"][data-id="'+id+'"]'); if(nb)nb.focus();
+  }
   else if(a==='comentar')comId=id;
   else if(a==='cancelarcom')comId=null;
   else if(a==='editar')editId=id;
